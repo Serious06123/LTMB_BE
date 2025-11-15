@@ -1,0 +1,11 @@
+# Thư mục thư viện
+node_modules/
+
+# File chứa thông tin nhạy cảm
+.env
+
+# Log files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

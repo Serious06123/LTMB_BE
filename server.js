@@ -15,7 +15,8 @@ app.use(express.json());
 const port = process.env.PORT || 4000;
 const mongoUri = process.env.MONGO_URI;
 const dbName = 'KHCFOOD'; // Tên database của bạn
-
+const GOONG_API_KEY = process.env.GOONG_API_KEY; 
+const GOONG_BASE_URL = 'https://rsapi.goong.io';
 let db;
 
 // Hàm kết nối đến MongoDB (giữ nguyên)
@@ -82,6 +83,72 @@ const resolvers = {
   },
 };
 
+// === THÊM CÁC API PROXY CHO MAP ===
+
+// 1. Tìm kiếm địa điểm (Find)
+app.get('/api/place/find', async (req, res) => {
+  try {
+    const { input } = req.query;
+    const url = `${GOONG_BASE_URL}/Place/Find?input=${encodeURIComponent(input)}&api_key=${GOONG_API_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. Tự động gợi ý (Autocomplete)
+app.get('/api/place/autocomplete', async (req, res) => {
+  try {
+    const { input } = req.query;
+    const url = `${GOONG_BASE_URL}/Place/AutoComplete?input=${encodeURIComponent(input)}&api_key=${GOONG_API_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. Lấy tọa độ từ địa chỉ (Geocode)
+app.get('/api/geocode', async (req, res) => {
+  try {
+    const { address } = req.query;
+    const url = `${GOONG_BASE_URL}/Geocode?address=${encodeURIComponent(address)}&api_key=${GOONG_API_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4. Lấy chi tiết địa điểm (Detail)
+app.get('/api/place/detail', async (req, res) => {
+  try {
+    const { place_id } = req.query;
+    const url = `${GOONG_BASE_URL}/Place/Detail?place_id=${place_id}&api_key=${GOONG_API_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 5. Dẫn đường (Direction)
+app.get('/api/direction', async (req, res) => {
+  try {
+    const { origin, destination, vehicle = 'car' } = req.query;
+    const url = `${GOONG_BASE_URL}/Direction?origin=${origin}&destination=${destination}&vehicle=${vehicle}&api_key=${GOONG_API_KEY}&alternatives=true`;
+    const response = await fetch(url);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 // === KHỞI ĐỘNG SERVER ===
 
 // Chúng ta tạo một hàm async để khởi động server

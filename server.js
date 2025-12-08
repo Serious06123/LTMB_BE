@@ -1,187 +1,199 @@
-// Chuyển toàn bộ sang cú pháp 'import'
-import 'dotenv/config'; // Tải các biến từ file .env
+import 'dotenv/config';
 import express from 'express';
-import { MongoClient } from 'mongodb';
 import cors from 'cors';
+import mongoose from 'mongoose';
 import { ApolloServer } from '@apollo/server';
-// Import từ gói bạn vừa cài đặt
 import { expressMiddleware } from '@as-integrations/express5';
 
+// Import Models
+import Food from './models/Food.js';
+import Order from './models/Order.js';
+import User from './models/User.js';
+
+// Import Routes
+import mapRoutes from './routes/mapRoutes.js';
+
 const app = express();
-// Middleware cơ bản vẫn giữ nguyên
 app.use(cors());
 app.use(express.json());
 
 const port = process.env.PORT || 4000;
 const mongoUri = process.env.MONGO_URI;
-const dbName = 'KHCFOOD'; // Tên database của bạn
-const GOONG_API_KEY = process.env.GOONG_API_KEY; 
-const GOONG_BASE_URL = 'https://rsapi.goong.io';
-let db;
 
-// Hàm kết nối đến MongoDB (giữ nguyên)
+// 1. Kết nối MongoDB qua Mongoose
 async function connectToDb() {
   try {
-    const client = new MongoClient(mongoUri);
-    await client.connect();
-    console.log('✅ Đã kết nối thành công đến MongoDB Atlas!');
-    db = client.db(dbName);
+    await mongoose.connect(mongoUri);
+    console.log('✅ Đã kết nối thành công đến MongoDB Atlas (Mongoose)!');
   } catch (e) {
-    console.error('Không thể kết nối đến MongoDB', e);
-    process.exit(1); // Thoát nếu không kết nối được
+    console.error('❌ Không thể kết nối đến MongoDB', e);
+    process.exit(1);
   }
 }
 
-// === ĐỊNH NGHĨA GRAPHQL SCHEMA ===
+// 2. Định nghĩa GraphQL Schema
 const typeDefs = `#graphql
-  # Định nghĩa kiểu dữ liệu trả về khi đăng nhập
+  type User {
+    id: ID
+    name: String
+    email: String
+    role: String
+  }
+
+  type Ingredient {
+    name: String
+    icon: String
+  }
+
+  type Food {
+    id: ID!
+    name: String
+    price: Float
+    image: String
+    rating: Float
+    reviews: Int
+    category: String
+    status: String
+    description: String
+    ingredients: [Ingredient]
+  }
+
+  type OrderItem {
+    name: String
+    price: Float
+    quantity: Int
+    image: String
+    tag: String
+  }
+
+  type Order {
+    id: ID
+    status: String
+    totalAmount: Float
+    items: [OrderItem]
+    shipperId: ID
+  }
+
   type AuthPayload {
     success: Boolean!
     token: String
     error: String
+    user: User
   }
 
-  # Định nghĩa các mutation (hàm thay đổi dữ liệu)
   type Mutation {
     login(email: String!, password: String!): AuthPayload!
+    # --- ĐÃ SỬA: Thêm định nghĩa register vào đây ---
+    register(name: String!, email: String!, password: String!): AuthPayload!
   }
 
-  # Định nghĩa các query (hàm lấy dữ liệu)
   type Query {
-    hello: String
+    getFoods(category: String): [Food]
+    getRunningOrders: [Order]
+    myRunningOrders(userId: ID!): [Order]
   }
 `;
 
-// === ĐỊNH NGHĨA RESOLVERS (LOGIC XỬ LÝ) ===
+// 3. Resolvers (Dùng Mongoose Model)
 const resolvers = {
   Query: {
-    hello: () => 'Chào mừng bạn đến với GraphQL API!',
+    getFoods: async (_, { category }) => {
+      if (!category || category === 'All') {
+        return await Food.find({});
+      }
+      return await Food.find({ category });
+    },
+    getRunningOrders: async () => {
+      // Lấy tất cả đơn đang chạy (cho chủ quán)
+      return await Order.find({ status: { $in: ['preparing', 'shipping'] } });
+    },
+    myRunningOrders: async (_, { userId }) => {
+       // Lấy đơn đang chạy của user cụ thể (cho khách hàng)
+       return await Order.find({ 
+           customerId: userId,
+           status: { $in: ['preparing', 'shipping'] } 
+       });
+    },
   },
   Mutation: {
-    // Di chuyển logic từ app.post('/api/login') vào đây
     login: async (_, { email, password }) => {
+      // Tìm user bằng Mongoose Model
+      const user = await User.findOne({ email });
+      
+      if (!user || user.password !== password) {
+        return { success: false, error: 'Email hoặc mật khẩu không đúng' };
+      }
+
+      return { 
+          success: true, 
+          token: 'fake-jwt-token-tu-backend', 
+          user: { ...user.toObject(), id: user._id }
+      };
+    },
+    register: async (_, { name, email, password }) => {
       try {
-        const user = await db.collection('users').findOne({ email: email });
-
-        if (!user) {
-          return { success: false, error: 'Không tìm thấy người dùng' };
+        // --- ĐÃ SỬA: Dùng Mongoose User.findOne thay vì db.collection ---
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+          return { success: false, error: 'Email này đã được sử dụng' };
         }
 
-        // Giả sử bạn so sánh mật khẩu (trong thực tế, hãy dùng bcrypt)
-        if (user.password !== password) {
-          return { success: false, error: 'Email hoặc mật khẩu không đúng' };
-        }
+        // Tạo user mới bằng Mongoose Model
+        const newUser = new User({
+          name,
+          email,
+          password, 
+          role: 'customer', 
+          avatar: 'https://picsum.photos/200/300',
+        });
 
-        // Đăng nhập thành công
-        return { success: true, token: 'fake-jwt-token-tu-backend-graphql' };
-
-      } catch (error) {
-        console.error('Lỗi đăng nhập:', error);
-        return { success: false, error: 'Đã có lỗi xảy ra, vui lòng thử lại.' };
+        // Lưu vào DB
+        await newUser.save();
+        
+        return {
+          success: true,
+          token: 'fake-jwt-token-new',
+          user: { ...newUser.toObject(), id: newUser._id }
+        };
+      } catch (err) {
+        console.error(err);
+        return { success: false, error: 'Lỗi server khi đăng ký' };
       }
     },
   },
 };
 
-// === THÊM CÁC API PROXY CHO MAP ===
+// === SỬ DỤNG ROUTES ===
+// Gắn mapRoutes vào đường dẫn /api
+app.use('/api', mapRoutes);
 
-// 1. Tìm kiếm địa điểm (Find)
-app.get('/api/place/find', async (req, res) => {
-  try {
-    const { input } = req.query;
-    const url = `${GOONG_BASE_URL}/Place/Find?input=${encodeURIComponent(input)}&api_key=${GOONG_API_KEY}`;
-    const response = await fetch(url);
-    const data = await response.json();
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+// (Đã xóa các đoạn app.get cũ bị trùng lặp ở đây để code gọn hơn)
 
-// 2. Tự động gợi ý (Autocomplete)
-app.get('/api/place/autocomplete', async (req, res) => {
-  try {
-    const { input } = req.query;
-    const url = `${GOONG_BASE_URL}/Place/AutoComplete?input=${encodeURIComponent(input)}&api_key=${GOONG_API_KEY}`;
-    const response = await fetch(url);
-    const data = await response.json();
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// 3. Lấy tọa độ từ địa chỉ (Geocode)
-app.get('/api/geocode', async (req, res) => {
-  try {
-    const { address } = req.query;
-    const url = `${GOONG_BASE_URL}/Geocode?address=${encodeURIComponent(address)}&api_key=${GOONG_API_KEY}`;
-    const response = await fetch(url);
-    const data = await response.json();
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// 4. Lấy chi tiết địa điểm (Detail)
-app.get('/api/place/detail', async (req, res) => {
-  try {
-    const { place_id } = req.query;
-    const url = `${GOONG_BASE_URL}/Place/Detail?place_id=${place_id}&api_key=${GOONG_API_KEY}`;
-    const response = await fetch(url);
-    const data = await response.json();
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// 5. Dẫn đường (Direction)
-app.get('/api/direction', async (req, res) => {
-  try {
-    const { origin, destination, vehicle = 'car' } = req.query;
-    const url = `${GOONG_BASE_URL}/Direction?origin=${origin}&destination=${destination}&vehicle=${vehicle}&api_key=${GOONG_API_KEY}&alternatives=true`;
-    const response = await fetch(url);
-    const data = await response.json();
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 // === KHỞI ĐỘNG SERVER ===
-
-// Chúng ta tạo một hàm async để khởi động server
 async function startServer() {
-  // 1. Kết nối DB
   await connectToDb();
 
-  // 2. Khởi tạo Apollo Server
   const server = new ApolloServer({
     typeDefs,
     resolvers,
   });
 
-  // 3. Khởi động Apollo Server
   await server.start();
 
-  // 4. Gắn Apollo làm middleware cho Express tại endpoint '/graphql'
   app.use(
     '/graphql',
     cors(),
     express.json(),
     expressMiddleware(server, {
-      // bạn có thể thêm context ở đây nếu cần
       context: async ({ req }) => ({ token: req.headers.token }),
     }),
   );
 
-  // 5. Khởi động Express
   app.listen(port, () => {
     console.log(`🚀 Server đang chạy tại http://localhost:${port}`);
     console.log(`🚀 GraphQL endpoint tại http://localhost:${port}/graphql`);
+    console.log(`🚀 Map API endpoint tại http://localhost:${port}/api`);
   });
 }
 
-// Gọi hàm để bắt đầu mọi thứ
 startServer();

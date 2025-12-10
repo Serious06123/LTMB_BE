@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema({
   email: String,
   password: String,
   role: String, //customer, restaurant, shipper
-  avatar: String
-});
+  avatar: String,
+}, { timestamps: true });
 
 export default mongoose.model('User', userSchema);

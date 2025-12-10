@@ -12,6 +12,7 @@ import User from './models/User.js';
 
 // Import Routes
 import mapRoutes from './routes/mapRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 
 const app = express();
 app.use(cors());
@@ -81,10 +82,11 @@ const typeDefs = `#graphql
     user: User
   }
 
+
   type Mutation {
     login(email: String!, password: String!): AuthPayload!
-    # --- ĐÃ SỬA: Thêm định nghĩa register vào đây ---
     register(name: String!, email: String!, password: String!): AuthPayload!
+    changePassword(email: String!, newPassword: String!): AuthPayload!
   }
 
   type Query {
@@ -160,12 +162,29 @@ const resolvers = {
         return { success: false, error: 'Lỗi server khi đăng ký' };
       }
     },
+    
+    // Đổi mật khẩu
+    changePassword: async (_, { email, newPassword }) => {
+      try {
+        const user = await User.findOne({ email });
+        if (!user) {
+          return { success: false, error: 'Không tìm thấy người dùng' };
+        }
+        user.password = newPassword;
+        await user.save();
+        return { success: true, user: { ...user.toObject(), id: user._id } };
+      } catch (err) {
+        return { success: false, error: 'Lỗi server' };
+      }
+    },
   },
 };
 
 // === SỬ DỤNG ROUTES ===
 // Gắn mapRoutes vào đường dẫn /api
 app.use('/api', mapRoutes);
+// Gắn auth routes
+app.use('/api/auth', authRoutes);
 
 // (Đã xóa các đoạn app.get cũ bị trùng lặp ở đây để code gọn hơn)
 

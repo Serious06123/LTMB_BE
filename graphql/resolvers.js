@@ -1,5 +1,3 @@
-// File: graphql/resolvers.js
-
 import Food from '../models/Food.js';
 import Order from '../models/Order.js';
 import User from '../models/User.js';

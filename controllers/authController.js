@@ -2,7 +2,8 @@ import nodemailer from 'nodemailer';
 import Otp from '../models/Otp.js';
 import fetch from 'node-fetch';
 import User from '../models/User.js';
-
+import dotenv from 'dotenv';
+dotenv.config();
 
 // Hàm sinh OTP ngẫu nhiên
 function generateOtp(length = 4) {
@@ -28,12 +29,12 @@ export async function resendOtp(req, res) {
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: 'daituongdarius22@gmail.com',
-      pass: 'ennnhiwsozcdnbpf',
+      user: process.env.user,
+      pass: process.env.pass,
     },
   });
   const mailOptions = {
-    from: 'daituongdarius22@gmail.com',
+    from: process.env.user,
     to: email,
     subject: 'Mã xác nhận OTP',
     text: `Mã OTP mới của bạn là: ${otp}. Mã sẽ hết hạn sau 5 phút.`,
@@ -82,15 +83,15 @@ export async function sendOtp(req, res) {
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: 'daituongdarius22@gmail.com', // Thay bằng Gmail của bạn
-        pass: 'ennnhiwsozcdnbpf',    // Thay bằng app password của Gmail
+        user: process.env.user, // Thay bằng Gmail của bạn
+        pass: process.env.pass,    // Thay bằng app password của Gmail
       },
     });
 
 
   // Nội dung email
   const mailOptions = {
-    from: 'daituongdarius22@gmail.com',
+    from: process.env.user,
     to: email,
     subject: 'Mã xác nhận OTP',
     text: `Mã OTP của bạn là: ${otp}. Mã sẽ hết hạn sau 5 phút.`,

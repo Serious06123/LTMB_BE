@@ -5,11 +5,6 @@ import mongoose from 'mongoose';
 import { ApolloServer } from '@apollo/server';
 import { expressMiddleware } from '@as-integrations/express5';
 
-// Import Models
-import Food from './models/Food.js';
-import Order from './models/Order.js';
-import User from './models/User.js';
-
 // Import Routes
 import mapRoutes from './routes/mapRoutes.js';
 import authRoutes from './routes/authRoutes.js';
@@ -40,8 +35,6 @@ async function connectToDb() {
 app.use('/api', mapRoutes);
 // Gắn auth routes
 app.use('/api/auth', authRoutes);
-
-// (Đã xóa các đoạn app.get cũ bị trùng lặp ở đây để code gọn hơn)
 
 // === KHỞI ĐỘNG SERVER ===
 async function startServer() {

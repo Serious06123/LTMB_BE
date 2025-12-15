@@ -3,8 +3,11 @@ import mongoose from 'mongoose';
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  phone: { type: String, required: true }, // Cần thiết để liên lạc giao hàng
+  
+  // QUAN TRỌNG: required: false để Google Login không bị lỗi
+  password: { type: String, required: false, default: '' },
+  phone: { type: String, required: false, default: '' }, 
+  
   role: { 
     type: String, 
     enum: ['customer', 'restaurant', 'shipper', 'admin'], 
@@ -12,17 +15,17 @@ const userSchema = new mongoose.Schema({
   },
   avatar: { type: String, default: '' },
   
-  // Địa chỉ và Tọa độ (Quan trọng cho tính năng Bản đồ/Ship)
+  // Địa chỉ và Tọa độ (Giữ nguyên cho tính năng Map)
   address: {
     street: String,
     city: String,
-    lat: Number, // Latitude
-    lng: Number, // Longitude
+    lat: Number, 
+    lng: Number, 
   },
 
-  // Dành riêng cho Shipper/Nhà hàng (Ví tiền, trạng thái hoạt động)
+  // Dành riêng cho Shipper/Nhà hàng
   walletBalance: { type: Number, default: 0 },
-  isVerified: { type: Boolean, default: false }, // Xác thực tài khoản
+  isVerified: { type: Boolean, default: false }, 
 }, { timestamps: true });
 
 export default mongoose.model('User', userSchema);

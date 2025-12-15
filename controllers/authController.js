@@ -91,58 +91,55 @@ export async function sendOtp(req, res) {
   }
 }
 
-// 4. GOOGLE LOGIN
+// --- HÀM GOOGLE LOGIN ĐÃ SỬA ---
 export async function googleLogin(req, res) {
   try {
     const { idToken } = req.body;
-    if (!idToken) return res.status(400).json({ success: false, error: 'Missing idToken' });
-
-    // Verify Google Token
-    const tokenInfoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-    if (!tokenInfoRes.ok) return res.status(400).json({ success: false, error: 'Invalid id token' });
-    
-    const tokenInfo = await tokenInfoRes.json();
-
-    if (process.env.GOOGLE_CLIENT_ID && tokenInfo.aud !== process.env.GOOGLE_CLIENT_ID) {
-      return res.status(400).json({ success: false, error: 'Token audience mismatch' });
+    if (!idToken) {
+      return res.status(400).json({ success: false, error: 'Missing idToken' });
     }
 
+    // 1. Xác minh token với Google
+    const tokenInfoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+    if (!tokenInfoRes.ok) {
+      return res.status(400).json({ success: false, error: 'Invalid id token' });
+    }
+    const tokenInfo = await tokenInfoRes.json();
+
     const email = tokenInfo.email;
-    const name = tokenInfo.name || (email ? email.split('@')[0] : '');
+    const name = tokenInfo.name || (email ? email.split('@')[0] : 'User');
     const avatar = tokenInfo.picture || '';
 
-    // Tìm hoặc tạo User
+    // 2. Tìm hoặc tạo user
     let user = await User.findOne({ email });
     if (!user) {
       user = new User({
         name,
         email,
-        password: '', // Google login không có password
+        password: '',
+        phone : '',
         role: 'customer',
         avatar,
-        phone: '', // Google không trả về phone, user sẽ cập nhật sau
-        isVerified: true // Google đã xác thực email rồi
       });
       await user.save();
     } else {
-      // Cập nhật thông tin nếu có thay đổi
       let changed = false;
       if (avatar && user.avatar !== avatar) { user.avatar = avatar; changed = true; }
-      if (name && user.name !== name) { user.name = name; changed = true; }
-      if (!user.isVerified) { user.isVerified = true; changed = true; } // Update luôn trạng thái
       if (changed) await user.save();
     }
 
-    // Tạo JWT Token riêng của hệ thống mình trả về cho Client
+    // 3. TẠO TOKEN (QUAN TRỌNG: App cần cái này để duy trì đăng nhập)
     const token = jwt.sign(
         { userId: user._id, role: user.role },
-        process.env.JWT_SECRET || 'SECRET_KEY',
-        { expiresIn: '7d' }
+        process.env.JWT_SECRET || 'SECRET_KEY', // Đảm bảo bạn có biến này trong .env
+        { expiresIn: '30d' }
     );
 
+    // 4. Trả về cả token và user
     return res.json({ success: true, token, user: { ...user.toObject(), id: user._id } });
+
   } catch (err) {
     console.error('googleLogin error', err);
-    return res.status(500).json({ success: false, error: 'Server error' });
+    return res.status(500).json({ success: false, error: 'Server error: ' + err.message });
   }
 }

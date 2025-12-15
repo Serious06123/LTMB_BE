@@ -62,3 +62,17 @@ export const direction = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const reverseGeocode = async (req, res) => {
+  try {
+    const { lat, lng } = req.query;
+    // Goong API Reverse Geocoding format: latlng={lat},{lng}
+    const url = `${GOONG_BASE_URL}/Geocode?latlng=${lat},${lng}&api_key=${GOONG_API_KEY}`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

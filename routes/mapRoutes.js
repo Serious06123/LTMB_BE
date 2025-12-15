@@ -4,7 +4,8 @@ import {
   autocomplete, 
   geocode, 
   placeDetail, 
-  direction 
+  direction ,
+  reverseGeocode
 } from '../controllers/mapController.js';
 
 const router = express.Router();
@@ -18,5 +19,6 @@ router.get('/place/autocomplete', autocomplete);
 router.get('/geocode', geocode);
 router.get('/place/detail', placeDetail);
 router.get('/direction', direction);
+router.get('/geocode/reverse', reverseGeocode);
 
 export default router;

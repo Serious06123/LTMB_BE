@@ -1,61 +1,95 @@
-export const typeDefs = `#graphql
-  type User {
-    id: ID
-    name: String
-    email: String
-    role: String
+const typeDefs = `#graphql
+  # 1. Định nghĩa kiểu Address (địa chỉ)
+  type Address {
+    street: String
+    city: String
+    lat: Float
+    lng: Float
   }
 
-  type Ingredient {
+  # 2. Cập nhật User Type với đầy đủ các trường mới
+  type User {
+    id: ID!
     name: String
-    icon: String
+    email: String
+    phone: String          # Mới thêm
+    role: String
+    avatar: String
+    isVerified: Boolean    # Mới thêm (Fix lỗi của bạn)
+    walletBalance: Float   # Mới thêm
+    address: Address       # Mới thêm
   }
 
   type Food {
     id: ID!
-    name: String
-    price: Float
+    name: String!
+    price: Float!
+    description: String
     image: String
     rating: Float
     reviews: Int
     category: String
+    isAvailable: Boolean
+    restaurantId: ID
+  }
+
+  type Order {
+    id: ID!
+    totalAmount: Float
     status: String
-    description: String
-    ingredients: [Ingredient]
+    items: [OrderItem]
+    customerId: ID
+    restaurantId: ID
+    shipperId: ID
   }
 
   type OrderItem {
+    foodId: ID
     name: String
     price: Float
     quantity: Int
     image: String
-    tag: String
   }
 
-  type Order {
-    id: ID
-    status: String
-    totalAmount: Float
-    items: [OrderItem]
-    shipperId: ID
-  }
-
+  # Kiểu dữ liệu trả về khi đăng nhập/đăng ký
   type AuthPayload {
-    success: Boolean!
     token: String
-    error: String
     user: User
   }
-
-  type Mutation {
-    login(email: String!, password: String!): AuthPayload!
-    register(name: String!, email: String!, password: String!): AuthPayload!
-    changePassword(email: String!, newPassword: String!): AuthPayload!
+  
+  # Kiểu dữ liệu trả về cho các thao tác mutation đơn giản
+  type DefaultResponse {
+    success: Boolean!
+    message: String
+    error: String
   }
 
   type Query {
     getFoods(category: String): [Food]
     getRunningOrders: [Order]
     myRunningOrders(userId: ID!): [Order]
+    getUserProfile(id: ID!): User
+  }
+
+  type Mutation {
+    # Login nhận identifier (email hoặc phone)
+    login(identifier: String!, password: String!): AuthPayload
+
+    # Register đầy đủ tham số
+    register(
+      name: String!, 
+      email: String!, 
+      password: String!, 
+      phone: String!, 
+      role: String
+    ): String # Trả về message thông báo
+
+    # Verify OTP (Fix lỗi thiếu cái này)
+    verifyOtp(email: String!, otp: String!): AuthPayload
+    
+    # Đổi mật khẩu
+    changePassword(email: String!, newPassword: String!): DefaultResponse
   }
 `;
+
+export { typeDefs };

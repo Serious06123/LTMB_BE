@@ -11,6 +11,8 @@ import authRoutes from './routes/authRoutes.js';
 
 import { resolvers } from './graphql/resolvers.js';
 import { typeDefs } from './graphql/typeDefs.js';
+
+import uploadRoutes from './routes/uploadRoutes.js';
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -35,7 +37,8 @@ async function connectToDb() {
 app.use('/api', mapRoutes);
 // Gắn auth routes
 app.use('/api/auth', authRoutes);
-
+// Gắn upload routes
+app.use('/api/upload', uploadRoutes);
 // === KHỞI ĐỘNG SERVER ===
 async function startServer() {
   await connectToDb();

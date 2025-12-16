@@ -55,6 +55,8 @@ const typeDefs = `#graphql
   type AuthPayload {
     token: String
     user: User
+    success: Boolean
+    error: String
   }
   
   # Kiểu dữ liệu trả về cho các thao tác mutation đơn giản
@@ -85,8 +87,8 @@ const typeDefs = `#graphql
   }
 
   type Mutation {
-    # Login nhận identifier (email hoặc phone)
-    login(identifier: String!, password: String!): AuthPayload
+    # Login nhận identifier (email hoặc phone). Backwards-compatible: accept `identifier` or `email`.
+    login(identifier: String, email: String, password: String!): AuthPayload
 
     # Register đầy đủ tham số
     register(

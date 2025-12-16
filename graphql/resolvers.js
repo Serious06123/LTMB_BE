@@ -49,9 +49,12 @@ const resolvers = {
 
   Mutation: {
     // 1. ĐĂNG NHẬP
-    login: async (_, { identifier, password }) => {
+    login: async (_, { identifier, email, password }) => {
+      const lookup = identifier || email;
+      if (!lookup) throw new Error('Vui lòng cung cấp email hoặc identifier');
+
       const user = await User.findOne({
-        $or: [{ email: identifier }, { phone: identifier }]
+        $or: [{ email: lookup }, { phone: lookup }]
       });
 
       if (!user) throw new Error('Tài khoản không tồn tại!');
@@ -70,7 +73,7 @@ const resolvers = {
         { expiresIn: '7d' }
       );
 
-      return { token, user };
+      return { token, user, success: true, error: null };
     },
 
     // 2. ĐĂNG KÝ
@@ -135,7 +138,7 @@ const resolvers = {
         { expiresIn: '7d' }
       );
 
-      return { token, user };
+      return { token, user, success: true, error: null };
     },
     
     // 4. ĐỔI MẬT KHẨU

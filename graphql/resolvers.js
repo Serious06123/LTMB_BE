@@ -17,13 +17,27 @@ const resolvers = {
       return await Food.find({ category });
     },
     getRunningOrders: async () => {
-      return await Order.find({ status: { $in: ['preparing', 'shipping'] } });
+      return await Order.find({ status: { $in: ['preparing',] } });
     },
     myRunningOrders: async (_, { userId }) => {
        return await Order.find({ 
            customerId: userId,
-           status: { $in: ['preparing', 'shipping'] } 
+           status: { $in: ['shipping'] } 
        });
+    },
+    // Lịch sử đơn hàng của Shipper
+    myShippingOrders: async (_, { userId }) => {
+       return await Order.find({ 
+           status: { $in: ['shipping', 'delivered', 'completed', 'cancelled'] } 
+       });
+    },
+
+    // Lấy profile user hiện tại
+    me: async (_, __, context) => {
+      if (!context.userId) {
+        throw new Error("Bạn chưa đăng nhập!");
+      }
+      return await User.findById(context.userId);
     },
     messages: async (_, { orderId, limit = 50, offset = 0 }) => {
       const msgs = await Message.find({ orderId })
@@ -248,7 +262,22 @@ const resolvers = {
         throw new Error("Lỗi tạo món: " + error.message);
       }
     },
-    
+  },
+
+  Order: {
+    customerUser: async (parent) => {
+      return await User.findOne({ _id: parent.customerId, role: "customer" });
+    },
+
+    restaurantUser: async (parent) => {
+      return await User.findOne({ _id: parent.restaurantId, role: "restaurant" });
+    },
+
+    restaurantFood: async (parent) => {
+      return await Food.findOne({ restaurantId: parent.restaurantId })
+    }
+
+
   },
 };
 

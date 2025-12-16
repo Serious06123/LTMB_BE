@@ -10,7 +10,7 @@ const orderSchema = new mongoose.Schema({
   // Trạng thái chi tiết hơn
   status: { 
     type: String, 
-    enum: ['pending', 'preparing', 'shipping', 'delivered', 'cancelled'], 
+    enum: ['pending', 'preparing', 'shipping', 'delivered', 'cancelled', 'completed'], 
     default: 'pending' 
   },
   

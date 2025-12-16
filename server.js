@@ -15,9 +15,11 @@ import User from './models/User.js';
 // Import Routes
 import mapRoutes from './routes/mapRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import uploadRoutes from './routes/uploadRoutes.js'; // <--- QUAN TRỌNG: Fix lỗi 404
 
 import { resolvers } from './graphql/resolvers.js';
 import { typeDefs } from './graphql/typeDefs.js';
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -25,7 +27,7 @@ app.use(express.json());
 const port = process.env.PORT || 4000;
 const mongoUri = process.env.MONGO_URI;
 
-// 1. Kết nối MongoDB qua Mongoose
+// Kết nối MongoDB
 async function connectToDb() {
   try {
     await mongoose.connect(mongoUri);
@@ -36,17 +38,14 @@ async function connectToDb() {
   }
 }
 
-
 // === SỬ DỤNG ROUTES ===
-// Gắn mapRoutes vào đường dẫn /api
 app.use('/api', mapRoutes);
-// Gắn auth routes
 app.use('/api/auth', authRoutes);
-// Messages REST
-import messageRoutes from './routes/messageRoutes.js';
-app.use('/api/messages', messageRoutes);
 
-// === KHỞI ĐỘNG SERVER ===
+// --- QUAN TRỌNG: Đăng ký route Upload ---
+app.use('/api/upload', uploadRoutes); // Fix lỗi 404 tại đây
+// ---------------------------------------
+
 async function startServer() {
   await connectToDb();
 
@@ -68,7 +67,7 @@ async function startServer() {
     cors(),
     express.json(),
     expressMiddleware(server, {
-      context: async ({ req }) => ({ token: req.headers.token, io }),
+      context: async ({ req }) => ({ token: req.headers.token }),
     }),
   );
 
@@ -191,6 +190,7 @@ async function startServer() {
     console.log(`🚀 GraphQL endpoint tại http://localhost:${port}/graphql`);
     console.log(`🚀 Map API endpoint tại http://localhost:${port}/api`);
     console.log(`🚀 Socket.IO ready`);
+    console.log(`🚀 Upload API endpoint tại http://localhost:${port}/api/upload`);
   });
 }
 

@@ -2,6 +2,7 @@ import Food from '../models/Food.js';
 import Order from '../models/Order.js';
 import User from '../models/User.js';
 import Otp from '../models/Otp.js';
+import Category from '../models/Category.js';
 import Message from '../models/Message.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -73,6 +74,19 @@ const resolvers = {
       }
 
       return await Food.find(query).sort({ createdAt: -1 });
+    },
+    getCategories: async () => {
+      return await Category.find({ isActive: true });
+    },
+    getUserProfile: async (_, { id }) => {
+      try {
+        const user = await User.findById(id);
+        if (!user) throw new Error("Không tìm thấy người dùng");
+        return user;
+      } catch (error) {
+        console.log(error);
+        return null;
+      }
     },
   },
 
@@ -261,6 +275,30 @@ const resolvers = {
       } catch (error) {
         throw new Error("Lỗi tạo món: " + error.message);
       }
+    },
+    // --- THÊM: Tạo Category ---
+    createCategory: async (_, { name, image }) => {
+      const newCat = new Category({ name, image });
+      return await newCat.save();
+    },
+
+    // --- THÊM: Update Profile ---
+    updateProfile: async (_, args, context) => {
+      if (!context.userId) throw new Error("Unauthorized");
+
+      const updateData = {};
+      if (args.name) updateData.name = args.name;
+      if (args.phone) updateData.phone = args.phone;
+      if (args.avatar) updateData.avatar = args.avatar;
+      if (args.address) updateData.address = args.address;
+
+      const updatedUser = await User.findByIdAndUpdate(
+        context.userId,
+        updateData,
+        { new: true } // Trả về data mới sau khi update
+      );
+
+      return updatedUser;
     },
   },
 

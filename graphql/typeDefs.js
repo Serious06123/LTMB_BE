@@ -1,4 +1,5 @@
 const typeDefs = `#graphql
+
   # 1. Định nghĩa kiểu Address
   type Address {
     street: String
@@ -6,7 +7,19 @@ const typeDefs = `#graphql
     lat: Float
     lng: Float
   }
+  input AddressInput {
+    street: String
+    city: String
+    lat: Float
+    lng: Float
+  }
 
+  # --- THÊM: Định nghĩa Category ---
+  type Category {
+    id: ID!
+    name: String!
+    image: String
+  }
   # 2. User Type đầy đủ
   type User {
     id: ID!
@@ -88,6 +101,7 @@ const typeDefs = `#graphql
     getUserProfile(id: ID!): User
     messages(orderId: ID!, limit: Int = 50, offset: Int = 0): [Message]
     myFoods(category: String): [Food]
+    getCategories: [Category]
     myShippingOrders: [Order]
     me: User
   }
@@ -123,6 +137,15 @@ const typeDefs = `#graphql
       image: String
       category: String!
     ): Food
+    # --- THÊM: Quản lý Category (Chỉ Admin hoặc chạy script tạo) ---
+    createCategory(name: String!, image: String): Category
+    # --- THÊM: Cập nhật thông tin cá nhân ---
+    updateProfile(
+      name: String
+      phone: String
+      avatar: String
+      address: AddressInput
+    ): User
   }
 `;
 

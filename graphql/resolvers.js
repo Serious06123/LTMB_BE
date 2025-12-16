@@ -133,6 +133,27 @@ const resolvers = {
         return { success: false, error: 'Lỗi server' };
       }
     },
+    createFood: async (_, args, context) => {
+      // Bây giờ context.userId đã có dữ liệu nhờ sửa file server.js
+      if (!context.userId) {
+        throw new Error("Bạn chưa đăng nhập (Unauthorized)!");
+      }
+
+      try {
+        const newFood = new Food({
+          name: args.name,
+          price: args.price,
+          description: args.description,
+          image: args.image,         
+          category: args.category,
+          restaurantId: context.userId // Lấy ID từ token
+        });
+
+        return await newFood.save();
+      } catch (error) {
+        throw new Error("Lỗi tạo món: " + error.message);
+      }
+    },
   },
 };
 

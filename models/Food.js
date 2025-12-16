@@ -17,12 +17,7 @@ const foodSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User',
     required: true 
-  },
-  
-  ingredients: [{ 
-    name: String, 
-    icon: String 
-  }]
+  }
 }, { timestamps: true });
 
 export default mongoose.model('Food', foodSchema);

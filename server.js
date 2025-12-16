@@ -4,15 +4,16 @@ import cors from 'cors';
 import mongoose from 'mongoose';
 import { ApolloServer } from '@apollo/server';
 import { expressMiddleware } from '@as-integrations/express5';
+import jwt from 'jsonwebtoken'; // <--- QUAN TRỌNG: Để giải mã token
 
 // Import Routes
 import mapRoutes from './routes/mapRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import uploadRoutes from './routes/uploadRoutes.js'; // <--- QUAN TRỌNG: Fix lỗi 404
 
 import { resolvers } from './graphql/resolvers.js';
 import { typeDefs } from './graphql/typeDefs.js';
 
-import uploadRoutes from './routes/uploadRoutes.js';
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -20,7 +21,7 @@ app.use(express.json());
 const port = process.env.PORT || 4000;
 const mongoUri = process.env.MONGO_URI;
 
-// 1. Kết nối MongoDB qua Mongoose
+// Kết nối MongoDB
 async function connectToDb() {
   try {
     await mongoose.connect(mongoUri);
@@ -31,15 +32,14 @@ async function connectToDb() {
   }
 }
 
-
 // === SỬ DỤNG ROUTES ===
-// Gắn mapRoutes vào đường dẫn /api
 app.use('/api', mapRoutes);
-// Gắn auth routes
 app.use('/api/auth', authRoutes);
-// Gắn upload routes
-app.use('/api/upload', uploadRoutes);
-// === KHỞI ĐỘNG SERVER ===
+
+// --- QUAN TRỌNG: Đăng ký route Upload ---
+app.use('/api/upload', uploadRoutes); // Fix lỗi 404 tại đây
+// ---------------------------------------
+
 async function startServer() {
   await connectToDb();
 
@@ -55,7 +55,20 @@ async function startServer() {
     cors(),
     express.json(),
     expressMiddleware(server, {
-      context: async ({ req }) => ({ token: req.headers.token }),
+      // Logic giải mã Token để lấy userId
+      context: async ({ req }) => {
+        const authHeader = req.headers.authorization || ''; 
+        const token = authHeader.replace('Bearer ', '');
+
+        if (!token) return {}; 
+
+        try {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'SECRET_KEY');
+          return { userId: decoded.userId, role: decoded.role };
+        } catch (err) {
+          return {};
+        }
+      },
     }),
   );
 
@@ -63,6 +76,7 @@ async function startServer() {
     console.log(`🚀 Server đang chạy tại http://localhost:${port}`);
     console.log(`🚀 GraphQL endpoint tại http://localhost:${port}/graphql`);
     console.log(`🚀 Map API endpoint tại http://localhost:${port}/api`);
+    console.log(`🚀 Upload API endpoint tại http://localhost:${port}/api/upload`);
   });
 }
 

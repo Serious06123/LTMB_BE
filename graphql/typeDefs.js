@@ -1,5 +1,5 @@
 const typeDefs = `#graphql
-  # 1. Định nghĩa kiểu Address (địa chỉ)
+  # 1. Định nghĩa kiểu Address
   type Address {
     street: String
     city: String
@@ -7,17 +7,17 @@ const typeDefs = `#graphql
     lng: Float
   }
 
-  # 2. Cập nhật User Type với đầy đủ các trường mới
+  # 2. User Type đầy đủ
   type User {
     id: ID!
     name: String
     email: String
-    phone: String          # Mới thêm
+    phone: String
     role: String
     avatar: String
-    isVerified: Boolean    # Mới thêm (Fix lỗi của bạn)
-    walletBalance: Float   # Mới thêm
-    address: Address       # Mới thêm
+    isVerified: Boolean
+    walletBalance: Float
+    address: Address
   }
 
   type Food {
@@ -51,13 +51,11 @@ const typeDefs = `#graphql
     image: String
   }
 
-  # Kiểu dữ liệu trả về khi đăng nhập/đăng ký
   type AuthPayload {
     token: String
     user: User
   }
   
-  # Kiểu dữ liệu trả về cho các thao tác mutation đơn giản
   type DefaultResponse {
     success: Boolean!
     message: String
@@ -71,24 +69,34 @@ const typeDefs = `#graphql
     getUserProfile(id: ID!): User
   }
 
+  # --- PHẦN QUAN TRỌNG: Mutation chứa tất cả các hàm ---
   type Mutation {
-    # Login nhận identifier (email hoặc phone)
+    # Login
     login(identifier: String!, password: String!): AuthPayload
 
-    # Register đầy đủ tham số
+    # Register
     register(
       name: String!, 
       email: String!, 
       password: String!, 
       phone: String!, 
       role: String
-    ): String # Trả về message thông báo
+    ): String
 
-    # Verify OTP (Fix lỗi thiếu cái này)
+    # Verify OTP
     verifyOtp(email: String!, otp: String!): AuthPayload
     
-    # Đổi mật khẩu
+    # Change Password
     changePassword(email: String!, newPassword: String!): DefaultResponse
+
+    # --- HÀM createFood PHẢI NẰM TRONG DẤU NGOẶC NÀY ---
+    createFood(
+      name: String!
+      price: Float!
+      description: String
+      image: String
+      category: String!
+    ): Food
   }
 `;
 

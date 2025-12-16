@@ -64,6 +64,16 @@ const resolvers = {
     getCategories: async () => {
       return await Category.find({ isActive: true });
     },
+    getUserProfile: async (_, { id }) => {
+      try {
+        const user = await User.findById(id);
+        if (!user) throw new Error("Không tìm thấy người dùng");
+        return user;
+      } catch (error) {
+        console.log(error);
+        return null;
+      }
+    },
   },
 
   Mutation: {

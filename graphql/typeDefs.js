@@ -64,11 +64,24 @@ const typeDefs = `#graphql
     error: String
   }
 
+  type Message {
+    _id: ID!
+    orderId: ID!
+    senderId: ID!
+    senderName: String
+    receiverId: ID!
+    content: String!
+    messageType: String
+    isRead: Boolean
+    createdAt: String
+  }
+
   type Query {
     getFoods(category: String): [Food]
     getRunningOrders: [Order]
     myRunningOrders(userId: ID!): [Order]
     getUserProfile(id: ID!): User
+    messages(orderId: ID!, limit: Int = 50, offset: Int = 0): [Message]
   }
 
   type Mutation {
@@ -89,6 +102,10 @@ const typeDefs = `#graphql
     
     # Đổi mật khẩu
     changePassword(email: String!, newPassword: String!): DefaultResponse
+
+    # Messages
+    sendMessage(orderId: ID!, receiverId: ID!, content: String!, messageType: String): Message
+    markMessagesRead(orderId: ID!, userId: ID!): Boolean
   }
 `;
 

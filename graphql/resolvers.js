@@ -2,6 +2,7 @@ import Food from '../models/Food.js';
 import Order from '../models/Order.js';
 import User from '../models/User.js';
 import Otp from '../models/Otp.js';
+import Message from '../models/Message.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
@@ -23,6 +24,26 @@ const resolvers = {
            customerId: userId,
            status: { $in: ['preparing', 'shipping'] } 
        });
+    },
+    messages: async (_, { orderId, limit = 50, offset = 0 }) => {
+      const msgs = await Message.find({ orderId })
+        .sort({ createdAt: -1 })
+        .skip(offset)
+        .limit(limit)
+        .populate('senderId', 'name avatar');
+
+      // Normalize output
+      return msgs.map((m) => ({
+        _id: m._id,
+        orderId: m.orderId,
+        senderId: m.senderId?._id || m.senderId,
+        senderName: m.senderId?.name || null,
+        receiverId: m.receiverId,
+        content: m.content,
+        messageType: m.messageType,
+        isRead: m.isRead,
+        createdAt: m.createdAt,
+      }));
     },
   },
 
@@ -132,6 +153,61 @@ const resolvers = {
       } catch (err) {
         return { success: false, error: 'Lỗi server' };
       }
+    },
+    sendMessage: async (_, { orderId, receiverId, content, messageType = 'text' }, context) => {
+      // auth
+      const token = context?.token || '';
+      function verifyTokenLocal(t) {
+        if (!t) return null;
+        try {
+          return jwt.verify(t.replace('Bearer ', ''), process.env.JWT_SECRET || 'SECRET_KEY');
+        } catch (err) {
+          return null;
+        }
+      }
+
+      const payload = verifyTokenLocal(token);
+      if (!payload) throw new Error('Unauthorized');
+
+      const senderId = payload.userId;
+      const order = await Order.findById(orderId);
+      if (!order) throw new Error('Order not found');
+
+      const isValidPair = (senderId.toString() === order.customerId.toString() && receiverId === order.shipperId?.toString()) ||
+        (senderId.toString() === order.shipperId?.toString() && receiverId === order.customerId.toString());
+      if (!isValidPair) throw new Error('Invalid sender/receiver for this order');
+
+      const msg = await Message.create({ orderId, senderId, receiverId, content, messageType });
+      const populated = await Message.findById(msg._id).populate('senderId', 'name avatar');
+
+      const out = {
+        _id: populated._id,
+        orderId: populated.orderId,
+        senderId: populated.senderId._id,
+        senderName: populated.senderId.name,
+        receiverId: populated.receiverId,
+        content: populated.content,
+        messageType: populated.messageType,
+        isRead: populated.isRead,
+        createdAt: populated.createdAt,
+      };
+
+      // Emit via Socket.IO if available in context
+      try {
+        const io = context?.io;
+        if (io) {
+          const room = `order_${orderId}`;
+          io.to(room).emit('message_received', out);
+        }
+      } catch (e) {
+        console.error('Emit error', e);
+      }
+
+      return out;
+    },
+    markMessagesRead: async (_, { orderId, userId }) => {
+      await Message.updateMany({ orderId, receiverId: userId, isRead: false }, { isRead: true });
+      return true;
     },
   },
 };

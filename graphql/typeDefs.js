@@ -82,8 +82,9 @@ const typeDefs = `#graphql
     myRunningOrders(userId: ID!): [Order]
     getUserProfile(id: ID!): User
     messages(orderId: ID!, limit: Int = 50, offset: Int = 0): [Message]
+    myFoods(category: String): [Food]
   }
-
+  
   # --- PHẦN QUAN TRỌNG: Mutation chứa tất cả các hàm ---
   type Mutation {
     # Login

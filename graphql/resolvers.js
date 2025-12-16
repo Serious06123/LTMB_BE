@@ -45,6 +45,21 @@ const resolvers = {
         createdAt: m.createdAt,
       }));
     },
+    myFoods: async (_, { category }, context) => {
+      // 1. Lấy ID từ Token (context)
+      if (!context.userId) {
+        throw new Error("Bạn chưa đăng nhập!");
+      }
+
+      // 2. Query theo ID của người đang đăng nhập
+      const query = { restaurantId: context.userId };
+
+      if (category && category !== 'All') {
+        query.category = category;
+      }
+
+      return await Food.find(query).sort({ createdAt: -1 });
+    },
   },
 
   Mutation: {
@@ -233,6 +248,7 @@ const resolvers = {
         throw new Error("Lỗi tạo món: " + error.message);
       }
     },
+    
   },
 };
 

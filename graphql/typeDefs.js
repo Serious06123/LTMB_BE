@@ -180,6 +180,10 @@ const typeDefs = `#graphql
     getFood(id: ID!): Food
     getFoodsByRestaurant(restaurantId: ID!, category: String): [Food]
     getOrder(id: ID!): Order
+    # Lấy thông tin quán của user đang đăng nhập
+    myRestaurantProfile: Restaurant
+    # Lấy đơn hàng của quán (có thể lọc theo trạng thái)
+    myRestaurantOrders(status: String): [Order]
   }
   
   type Mutation {
@@ -259,6 +263,7 @@ const typeDefs = `#graphql
     
     # Xóa sạch giỏ hàng (sau khi đặt đơn xong)
     clearCart: Boolean
+    updateRestaurantStatus(isOpen: Boolean!): Restaurant
   }
 `;
 

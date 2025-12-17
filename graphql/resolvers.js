@@ -201,6 +201,36 @@ const resolvers = {
       }
       return await Food.find(query);
     },
+    myRestaurantProfile: async (_, __, context) => {
+       // 1. Kiểm tra xem User ID có nhận được từ token không
+       console.log("👉 Login User ID:", context.userId); 
+
+       if (!context.userId) throw new Error("Unauthorized");
+       
+       // 2. Log lệnh tìm kiếm
+       const restaurant = await Restaurant.findOne({ accountId: context.userId });
+       
+       // 3. Kiểm tra kết quả
+       console.log("👉 Found Restaurant:", restaurant); 
+
+       return restaurant;
+    },
+
+    myRestaurantOrders: async (_, { status }, context) => {
+       if (!context.userId) throw new Error("Unauthorized");
+       
+       const filter = { restaurantId: context.userId };
+       
+       // Nếu có status thì lọc, ví dụ: 'pending', 'preparing'
+       if (status && status !== 'All') {
+          // Có thể dùng $in nếu muốn lọc nhiều trạng thái
+          filter.status = status; 
+       }
+       
+       return await Order.find(filter)
+         .populate('customerUser') // Để lấy tên khách hàng
+         .sort({ createdAt: -1 }); // Mới nhất lên đầu
+    },
   },
 
   Mutation: {
@@ -467,6 +497,16 @@ const resolvers = {
       if (!context.userId) throw new Error("Unauthorized");
       await Cart.findOneAndDelete({ userId: context.userId });
       return true;
+    },
+    updateRestaurantStatus: async (_, { isOpen }, context) => {
+      if (!context.userId) throw new Error("Unauthorized");
+      const restaurant = await Restaurant.findOneAndUpdate(
+        { accountId: context.userId },
+        { isOpen },
+        { new: true }
+      );
+      if (!restaurant) throw new Error("Không tìm thấy thông tin Quán");
+      return restaurant;
     }
   },
 };

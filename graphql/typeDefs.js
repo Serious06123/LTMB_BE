@@ -162,6 +162,22 @@ const typeDefs = `#graphql
     quantity: Int!
     image: String
   }
+  
+  input CreateOrderItemInput {
+    foodId: ID
+    name: String
+    price: Float
+    quantity: Int
+    image: String
+  }
+
+  input CreateOrderInput {
+    restaurantId: ID!
+    items: [CreateOrderItemInput]!
+    totalAmount: Float!
+    paymentMethod: String
+    shippingAddress: AddressInput
+  }
   type Query {
     getCategories: [Category]
     getFoods(category: String): [Food]
@@ -254,6 +270,7 @@ const typeDefs = `#graphql
       restaurantId: ID!
       items: [CartItemInput]!
     ): Cart
+    createOrder(input: CreateOrderInput!): Order
     
     # Xóa sạch giỏ hàng (sau khi đặt đơn xong)
     clearCart: Boolean

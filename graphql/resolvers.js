@@ -403,6 +403,67 @@ const resolvers = {
       );
       return cart;
     },
+    createOrder: async (_, { input }, context) => {
+      if (!context.userId) throw new Error('Unauthorized');
+      const { restaurantId, items, totalAmount, paymentMethod, shippingAddress } = input;
+      if (!restaurantId) throw new Error('restaurantId required');
+
+      const orderData = {
+        customerId: context.userId,
+        restaurantId,
+        items: items || [],
+        totalAmount: totalAmount || 0,
+        paymentMethod: paymentMethod === 'ONLINE' ? 'ONLINE' : 'COD',
+        paymentStatus: paymentMethod === 'ONLINE' ? 'paid' : 'unpaid',
+        shippingAddress: shippingAddress || {},
+      };
+
+      const newOrder = new Order(orderData);
+
+      // Save order
+      const saved = await newOrder.save();
+
+      // Remove only the items that were paid from the user's cart.
+      // If the cart belongs to the same restaurant, remove the matching items;
+      // if the cart becomes empty afterward, delete the cart document.
+      try {
+        const cart = await Cart.findOne({ userId: context.userId });
+        if (cart) {
+          // If cart.restaurantId differs from order.restaurantId, we only
+          // remove items that match foodIds in the order and belonging to that restaurant.
+          const paidFoodIds = (items || []).map(i => i.foodId?.toString()).filter(Boolean);
+
+          // Filter out items from cart that are in paidFoodIds
+          const remainingItems = (cart.items || []).filter(ci => !paidFoodIds.includes((ci.foodId || ci.id || '').toString()));
+
+          if (remainingItems.length === 0) {
+            await Cart.findOneAndDelete({ userId: context.userId });
+          } else {
+            // Recompute total
+            let total = 0;
+            remainingItems.forEach(it => { total += (it.price || 0) * (it.quantity || 0); });
+            cart.items = remainingItems;
+            cart.totalAmount = total;
+            cart.restaurantId = remainingItems.length > 0 ? cart.restaurantId : null;
+            await cart.save();
+          }
+        }
+      } catch (e) {
+        console.error('Failed to remove paid items from cart after order', e);
+      }
+
+      // Emit socket event to restaurant room if io available
+      try {
+        const io = context?.io;
+        if (io) {
+          io.to(`order_${restaurantId}`).emit('order_created', saved);
+        }
+      } catch (e) {
+        console.error('Socket emit error', e);
+      }
+
+      return saved;
+    },
     clearCart: async (_, __, context) => {
       if (!context.userId) throw new Error("Unauthorized");
       await Cart.findOneAndDelete({ userId: context.userId });

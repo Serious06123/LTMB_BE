@@ -1,10 +1,24 @@
 const typeDefs = `#graphql
+
   # 1. Định nghĩa kiểu Address
   type Address {
     street: String
     city: String
     lat: Float
     lng: Float
+  }
+  input AddressInput {
+    street: String
+    city: String
+    lat: Float
+    lng: Float
+  }
+
+  # --- Định nghĩa Category ---
+  type Category {
+    id: ID!
+    name: String!
+    image: String
   }
 
   # 2. User Type đầy đủ
@@ -33,6 +47,7 @@ const typeDefs = `#graphql
     restaurantId: ID
   }
 
+  # --- CẬP NHẬT: Thêm các trường quan hệ cho Order ---
   type Order {
     id: ID!
     totalAmount: Float
@@ -41,6 +56,13 @@ const typeDefs = `#graphql
     customerId: ID
     restaurantId: ID
     shipperId: ID
+    createdAt: String       
+    shippingAddress: Address
+    # Các trường resolve từ User/Food
+    customerUser: User
+    restaurantUser: User
+    restaurantFood: Food
+    restaurant: User
   }
 
   type OrderItem {
@@ -74,6 +96,15 @@ const typeDefs = `#graphql
     messageType: String
     isRead: Boolean
     createdAt: String
+  }
+  type Review {
+    id: ID!
+    userId: ID!
+    foodId: ID!
+    rating: Int!
+    comment: String
+    createdAt: String
+    user: User 
   }
 
   type Category {
@@ -111,9 +142,13 @@ const typeDefs = `#graphql
     getUserProfile(id: ID!): User
     messages(orderId: ID!, limit: Int = 50, offset: Int = 0): [Message]
     myFoods(category: String): [Food]
+    getCategories: [Category]
+    myShippingOrders: [Order]
+    me: User
+    getFoodReviews(foodId: ID!): [Review]
+    myOrders: [Order]
   }
   
-  # --- PHẦN QUAN TRỌNG: Mutation chứa tất cả các hàm ---
   type Mutation {
     # Login nhận identifier (email hoặc phone). Backwards-compatible: accepts identifier or email.
     login(identifier: String, email: String, password: String!): AuthPayload
@@ -136,7 +171,8 @@ const typeDefs = `#graphql
     # Messages
     sendMessage(orderId: ID!, receiverId: ID!, content: String!, messageType: String): Message
     markMessagesRead(orderId: ID!, userId: ID!): Boolean
-    # --- HÀM createFood PHẢI NẰM TRONG DẤU NGOẶC NÀY ---
+    
+    # --- createFood ---
     createFood(
       name: String!
       price: Float!
@@ -153,6 +189,35 @@ const typeDefs = `#graphql
       deliveryTime: String
       deliveryFee: Float
     ): Restaurant
+    
+    # --- updateFood ---
+    updateFood(
+      id: ID!
+      name: String
+      price: Float
+      description: String
+      image: String
+      category: String
+      isAvailable: Boolean 
+    ): Food
+    
+    # --- Quản lý Category ---
+    createCategory(name: String!, image: String): Category
+    
+    # --- Cập nhật thông tin cá nhân ---
+    updateProfile(
+      name: String
+      phone: String
+      avatar: String
+      address: AddressInput
+    ): User
+    
+    addReview(
+      foodId: ID!
+      orderId: ID!
+      rating: Int!
+      comment: String
+    ): Review
   }
 `;
 

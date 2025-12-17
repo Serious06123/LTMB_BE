@@ -4,6 +4,8 @@ import User from '../models/User.js';
 import Otp from '../models/Otp.js';
 import Category from '../models/Category.js';
 import Message from '../models/Message.js';
+import Category from '../models/Category.js';
+import Restaurant from '../models/Restaurant.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import sendEmail from '../utils/sendEmail.js';
@@ -33,7 +35,23 @@ const resolvers = {
   },
 
   Query: {
-    // ... Giữ nguyên code Query cũ của bạn ...
+    getCategories: async () => {
+      return await Category.find({ isActive: true }).sort({ createdAt: -1 });
+    },
+    getRestaurants: async (_, { category }) => {
+      // If category param is provided, find restaurants that have that category id or name
+      if (!category || category === 'All') {
+        return await Restaurant.find({}).populate('categories');
+      }
+
+      // Try to accept either category id or name
+      const cat = await Category.findOne({ $or: [{ _id: category }, { name: category }] });
+      if (cat) {
+        return await Restaurant.find({ categories: cat._id }).populate('categories');
+      }
+
+      return await Restaurant.find({}).populate('categories');
+    },
     getFoods: async (_, { category }) => {
       if (!category || category === 'All') {
         return await Food.find({});
@@ -261,72 +279,23 @@ const resolvers = {
         throw new Error("Lỗi tạo món: " + error.message);
       }
     },
-    createCategory: async (_, { name, image }) => {
-      const newCat = new Category({ name, image });
-      return await newCat.save();
-    },
-    updateProfile: async (_, args, context) => {
-      if (!context.userId) throw new Error("Unauthorized");
-      const updateData = {};
-      if (args.name) updateData.name = args.name;
-      if (args.phone) updateData.phone = args.phone;
-      if (args.avatar) updateData.avatar = args.avatar;
-      if (args.address) updateData.address = args.address;
-      const updatedUser = await User.findByIdAndUpdate(
-        context.userId,
-        updateData,
-        { new: true }
-      );
-      return updatedUser;
-    },
-    updateFood: async (_, { id, name, price, description, image, category, isAvailable }) => {
-      try {
-        const updateFields = {
-          name,
-          price,
-          description,
-          image,
-          category
-        };
-        if (isAvailable !== undefined) {
-          updateFields.isAvailable = isAvailable;
-        }
-        Object.keys(updateFields).forEach(key => updateFields[key] === undefined && delete updateFields[key]);
-        const updatedFood = await Food.findByIdAndUpdate(
-          id,
-          updateFields,
-          { new: true }
-        );
-        return updatedFood;
-      } catch (err) {
-        throw new Error(err);
-      }
-    },
-    addReview: async (_, { foodId, orderId, rating, comment }, context) => {
-      if (!context.user) throw new Error('Bạn chưa đăng nhập');
-      const userId = context.user.id;
-      const order = await Order.findById(orderId);
-      if (!order) throw new Error('Đơn hàng không tồn tại');
-      if (order.status !== 'delivered' && order.status !== 'completed') {
-        throw new Error('Bạn chỉ được đánh giá khi đơn hàng đã giao xong');
-      }
-      const newReview = new Review({
-        userId,
-        foodId,
-        orderId,
-        rating,
-        comment
+    createRestaurant: async (_, args, context) => {
+      if (!context.userId) throw new Error('Unauthorized');
+
+      const newR = new Restaurant({
+        name: args.name,
+        accountId: context.userId,
+        categories: args.categories || [],
+        image: args.image || '',
+        address: args.address || {},
+        isOpen: typeof args.isOpen === 'boolean' ? args.isOpen : true,
+        deliveryTime: args.deliveryTime || '',
+        deliveryFee: args.deliveryFee || 0,
       });
-      await newReview.save();
-      const reviews = await Review.find({ foodId });
-      const totalRating = reviews.reduce((sum, r) => sum + r.rating, 0);
-      const avgRating = (totalRating / reviews.length).toFixed(1);
-      await Food.findByIdAndUpdate(foodId, {
-        rating: parseFloat(avgRating),
-        reviews: reviews.length
-      });
-      return newReview;
+
+      return await newR.save();
     },
+    
   },
 };
 

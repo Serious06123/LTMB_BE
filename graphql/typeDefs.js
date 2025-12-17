@@ -107,9 +107,36 @@ const typeDefs = `#graphql
     user: User 
   }
 
-  # --- CẬP NHẬT: Bổ sung các Query còn thiếu ---
+  type Category {
+    _id: ID!
+    name: String!
+    image: String
+    isActive: Boolean
+    createdAt: String
+    updatedAt: String
+  }
+
+  type Restaurant {
+    _id: ID!
+    name: String!
+    accountId: ID
+    categories: [Category]
+    rating: Float
+    reviews: Int
+    image: String
+    address: Address
+    isOpen: Boolean
+    deliveryTime: String
+    deliveryFee: Float
+    createdAt: String
+    updatedAt: String
+  }
+
   type Query {
+    # Categories for home / filters
+    getCategories: [Category]
     getFoods(category: String): [Food]
+    getRestaurants(category: String): [Restaurant]
     getRunningOrders: [Order]
     myRunningOrders(userId: ID!): [Order]
     getUserProfile(id: ID!): User
@@ -123,8 +150,8 @@ const typeDefs = `#graphql
   }
   
   type Mutation {
-    # Login
-    login(identifier: String!, password: String!): AuthPayload
+    # Login nhận identifier (email hoặc phone). Backwards-compatible: accepts identifier or email.
+    login(identifier: String, email: String, password: String!): AuthPayload
 
     # Register
     register(
@@ -153,6 +180,15 @@ const typeDefs = `#graphql
       image: String
       category: String!
     ): Food
+    createRestaurant(
+      name: String!
+      categories: [ID]
+      image: String
+      address: Address
+      isOpen: Boolean
+      deliveryTime: String
+      deliveryFee: Float
+    ): Restaurant
     
     # --- updateFood ---
     updateFood(

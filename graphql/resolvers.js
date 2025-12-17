@@ -3,6 +3,8 @@ import Order from '../models/Order.js';
 import User from '../models/User.js';
 import Otp from '../models/Otp.js';
 import Message from '../models/Message.js';
+import Category from '../models/Category.js';
+import Restaurant from '../models/Restaurant.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
@@ -10,6 +12,23 @@ import sendEmail from '../utils/sendEmail.js';
 
 const resolvers = {
   Query: {
+    getCategories: async () => {
+      return await Category.find({ isActive: true }).sort({ createdAt: -1 });
+    },
+    getRestaurants: async (_, { category }) => {
+      // If category param is provided, find restaurants that have that category id or name
+      if (!category || category === 'All') {
+        return await Restaurant.find({}).populate('categories');
+      }
+
+      // Try to accept either category id or name
+      const cat = await Category.findOne({ $or: [{ _id: category }, { name: category }] });
+      if (cat) {
+        return await Restaurant.find({ categories: cat._id }).populate('categories');
+      }
+
+      return await Restaurant.find({}).populate('categories');
+    },
     getFoods: async (_, { category }) => {
       if (!category || category === 'All') {
         return await Food.find({});
@@ -247,6 +266,22 @@ const resolvers = {
       } catch (error) {
         throw new Error("Lỗi tạo món: " + error.message);
       }
+    },
+    createRestaurant: async (_, args, context) => {
+      if (!context.userId) throw new Error('Unauthorized');
+
+      const newR = new Restaurant({
+        name: args.name,
+        accountId: context.userId,
+        categories: args.categories || [],
+        image: args.image || '',
+        address: args.address || {},
+        isOpen: typeof args.isOpen === 'boolean' ? args.isOpen : true,
+        deliveryTime: args.deliveryTime || '',
+        deliveryFee: args.deliveryFee || 0,
+      });
+
+      return await newR.save();
     },
     
   },

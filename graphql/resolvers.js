@@ -497,18 +497,18 @@ const resolvers = {
     },
     createOrder: async (_, { input }, context) => {
       if (!context.userId) throw new Error('Unauthorized');
-      const { restaurantId, items, totalAmount, paymentMethod, shippingAddress } = input;
+      const { restaurantId, items, totalAmount, paymentMethod, shippingAddress, shipperId } = input;
       if (!restaurantId) throw new Error('restaurantId required');
-      const shipper = await Shipper.find({});
       const orderData = {
         customerId: context.userId,
         restaurantId,
-        shipperId : shipper.length > 0 ? shipper[0]._id : shipper[0]._id,
+        shipperId: shipperId || null,
         items: items || [],
         totalAmount: totalAmount || 0,
         paymentMethod: paymentMethod === 'ONLINE' ? 'ONLINE' : 'COD',
         paymentStatus: paymentMethod === 'ONLINE' ? 'paid' : 'unpaid',
         shippingAddress: shippingAddress || {},
+        status: 'pending',
       };
 
       const newOrder = new Order(orderData);
@@ -530,7 +530,7 @@ const resolvers = {
           const remainingItems = (cart.items || []).filter(ci => !paidFoodIds.includes((ci.foodId || ci.id || '').toString()));
 
           if (remainingItems.length === 0) {
-            await Cart.findOneAndDelete({ userId: context.userId });
+            // await Cart.findOneAndDelete({ userId: context.userId });
           } else {
             // Recompute total
             let total = 0;
@@ -556,11 +556,6 @@ const resolvers = {
       }
 
       return saved;
-    },
-    clearCart: async (_, __, context) => {
-      if (!context.userId) throw new Error("Unauthorized");
-      await Cart.findOneAndDelete({ userId: context.userId });
-      return true;
     },
     updateRestaurantStatus: async (_, { isOpen }, context) => {
       if (!context.userId) throw new Error("Unauthorized");

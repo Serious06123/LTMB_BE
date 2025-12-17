@@ -173,7 +173,7 @@ const typeDefs = `#graphql
 
   input CreateOrderInput {
     restaurantId: ID!
-    shipperId: ID!
+    shipperId: ID
     items: [CreateOrderItemInput]!
     totalAmount: Float!
     paymentMethod: String
@@ -279,9 +279,6 @@ const typeDefs = `#graphql
       items: [CartItemInput]!
     ): Cart
     createOrder(input: CreateOrderInput!): Order
-    
-    # Xóa sạch giỏ hàng (sau khi đặt đơn xong)
-    clearCart: Boolean
     updateRestaurantStatus(isOpen: Boolean!): Restaurant
   }
 `;

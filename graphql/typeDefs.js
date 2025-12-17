@@ -49,6 +49,7 @@ const typeDefs = `#graphql
     category: String
     isAvailable: Boolean
     restaurantId: ID
+    restaurant: Restaurant
   }
 
   type Order {
@@ -176,6 +177,7 @@ const typeDefs = `#graphql
     myOrders: [Order]
     getShipperProfile: Shipper
     myCart: Cart
+    getFood(id: ID!): Food
   }
   
   type Mutation {

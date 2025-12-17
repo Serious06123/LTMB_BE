@@ -33,7 +33,14 @@ const resolvers = {
       return await Food.findOne({ restaurantId: parent.restaurantId })
     }
   },
-
+  Food: {
+    // Resolver này giúp lấy thông tin Restaurant khi query Food
+    restaurant: async (parent) => {
+      // parent.restaurantId là ID của User (role restaurant)
+      // Chúng ta cần tìm trong bảng Restaurant có accountId khớp với User ID đó
+      return await Restaurant.findOne({ accountId: parent.restaurantId });
+    }
+  },
   Query: {
     getCategories: async () => {
       return await Category.find({ isActive: true }).sort({ createdAt: -1 });
@@ -126,6 +133,13 @@ const resolvers = {
       if (!context.userId) throw new Error("Unauthorized");
       // Tìm giỏ hàng, nếu chưa có thì trả về null hoặc object rỗng tùy ý
       return await Cart.findOne({ userId: context.userId });
+    },
+    getFood: async (_, { id }) => {
+      try {
+        return await Food.findById(id);
+      } catch (err) {
+        throw new Error("Không tìm thấy món ăn");
+      }
     },
   },
 

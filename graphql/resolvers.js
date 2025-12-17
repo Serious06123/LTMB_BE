@@ -10,6 +10,17 @@ import jwt from 'jsonwebtoken';
 import sendEmail from '../utils/sendEmail.js'; 
 
 const resolvers = {
+  Review: {
+    user: async (parent) => {
+      return await parent.populate('userId').then(p => p.userId);
+    }
+  },
+  Order: {
+    restaurant: async (parent) => {
+      // Tìm User đóng vai trò là quán ăn dựa trên restaurantId
+      return await User.findById(parent.restaurantId);
+    }
+  },
   Query: {
     getFoods: async (_, { category }) => {
       if (!category || category === 'All') {
@@ -74,8 +85,19 @@ const resolvers = {
         return null;
       }
     },
+    getFoodReviews: async (_, { foodId }) => {
+      return await Review.find({ foodId }).populate('userId').sort({ createdAt: -1 });
+    },
+    myOrders: async (_, __, context) => {
+      if (!context.user) throw new Error('Bạn chưa đăng nhập!');
+      
+      // Tìm đơn hàng của customerId trùng với user đang login
+      // Sắp xếp theo ngày tạo mới nhất (createdAt: -1)
+      const orders = await Order.find({ customerId: context.user.id })
+                                .sort({ createdAt: -1 });
+      return orders;
+    },
   },
-
   Mutation: {
     // 1. ĐĂNG NHẬP
     login: async (_, { identifier, email, password }) => {
@@ -262,6 +284,7 @@ const resolvers = {
         throw new Error("Lỗi tạo món: " + error.message);
       }
     },
+    
     // --- THÊM: Tạo Category ---
     createCategory: async (_, { name, image }) => {
       const newCat = new Category({ name, image });
@@ -285,6 +308,68 @@ const resolvers = {
       );
 
       return updatedUser;
+    },
+    updateFood: async (_, { id, name, price, description, image, category, isAvailable }) => { 
+      try {
+        // Tạo object chứa các trường cần update
+        const updateFields = {
+          name,
+          price,
+          description,
+          image,
+          category
+        };
+        if (isAvailable !== undefined) {
+          updateFields.isAvailable = isAvailable;
+        }
+        // Loại bỏ các trường null/undefined để tránh ghi đè sai
+        Object.keys(updateFields).forEach(key => updateFields[key] === undefined && delete updateFields[key]);
+
+        const updatedFood = await Food.findByIdAndUpdate(
+          id,
+          updateFields,
+          { new: true } // Trả về dữ liệu mới sau khi update
+        );
+
+        return updatedFood;
+      } catch (err) {
+        throw new Error(err);
+      }
+    },
+    addReview: async (_, { foodId, orderId, rating, comment }, context) => {
+      // 1. Kiểm tra đăng nhập
+      if (!context.user) throw new Error('Bạn chưa đăng nhập');
+      const userId = context.user.id;
+
+      // 2. Kiểm tra xem đơn hàng đã hoàn thành chưa (Status = 'delivered' hoặc 'completed')
+      const order = await Order.findById(orderId);
+      if (!order) throw new Error('Đơn hàng không tồn tại');
+      if (order.status !== 'delivered' && order.status !== 'completed') { // Kiểm tra status của bạn
+         throw new Error('Bạn chỉ được đánh giá khi đơn hàng đã giao xong');
+      }
+
+      // 3. Tạo Review mới
+      const newReview = new Review({
+        userId,
+        foodId,
+        orderId,
+        rating,
+        comment
+      });
+      await newReview.save();
+
+      // 4. Tính toán lại rating trung bình cho món ăn (Food)
+      const reviews = await Review.find({ foodId });
+      const totalRating = reviews.reduce((sum, r) => sum + r.rating, 0);
+      const avgRating = (totalRating / reviews.length).toFixed(1);
+
+      // 5. Cập nhật vào bảng Food
+      await Food.findByIdAndUpdate(foodId, {
+        rating: parseFloat(avgRating),
+        reviews: reviews.length
+      });
+
+      return newReview;
     },
   },
 };

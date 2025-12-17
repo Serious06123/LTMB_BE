@@ -54,6 +54,8 @@ const typeDefs = `#graphql
     customerId: ID
     restaurantId: ID
     shipperId: ID
+    createdAt: String  # Thêm trường này để hiển thị ngày
+    restaurant: User   # Thêm trường này để lấy thông tin quán (tên, avatar)
   }
 
   type OrderItem {
@@ -88,6 +90,15 @@ const typeDefs = `#graphql
     isRead: Boolean
     createdAt: String
   }
+  type Review {
+    id: ID!
+    userId: ID!
+    foodId: ID!
+    rating: Int!
+    comment: String
+    createdAt: String
+    user: User 
+  }
 
   type Query {
     getFoods(category: String): [Food]
@@ -97,6 +108,8 @@ const typeDefs = `#graphql
     messages(orderId: ID!, limit: Int = 50, offset: Int = 0): [Message]
     myFoods(category: String): [Food]
     getCategories: [Category]
+    getFoodReviews(foodId: ID!): [Review]
+    myOrders: [Order]
   }
   
   # --- PHẦN QUAN TRỌNG: Mutation chứa tất cả các hàm ---
@@ -122,13 +135,23 @@ const typeDefs = `#graphql
     # Messages
     sendMessage(orderId: ID!, receiverId: ID!, content: String!, messageType: String): Message
     markMessagesRead(orderId: ID!, userId: ID!): Boolean
-    # --- HÀM createFood PHẢI NẰM TRONG DẤU NGOẶC NÀY ---
+    # --- createFood ---
     createFood(
       name: String!
       price: Float!
       description: String
       image: String
       category: String!
+    ): Food
+    # --- updateFood ---
+    updateFood(
+      id: ID!
+      name: String
+      price: Float
+      description: String
+      image: String
+      category: String
+      isAvailable: Boolean 
     ): Food
     # --- THÊM: Quản lý Category (Chỉ Admin hoặc chạy script tạo) ---
     createCategory(name: String!, image: String): Category
@@ -139,6 +162,12 @@ const typeDefs = `#graphql
       avatar: String
       address: AddressInput
     ): User
+    addReview(
+      foodId: ID!
+      orderId: ID!
+      rating: Int!
+      comment: String
+    ): Review
   }
 `;
 

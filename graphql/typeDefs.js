@@ -178,6 +178,8 @@ const typeDefs = `#graphql
     getShipperProfile: Shipper
     myCart: Cart
     getFood(id: ID!): Food
+    getFoodsByRestaurant(restaurantId: ID!, category: String): [Food]
+    getOrder(id: ID!): Order
   }
   
   type Mutation {

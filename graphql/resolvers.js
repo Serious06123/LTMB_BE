@@ -6,7 +6,7 @@ import Category from '../models/Category.js';
 import Message from '../models/Message.js';
 import Restaurant from '../models/Restaurant.js';
 import Review from '../models/Review.js';
-import Shipper from '../models/Shipper.js'; 
+import Shipper from '../models/Shipper.js';
 import Cart from '../models/Cart.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -46,14 +46,36 @@ const resolvers = {
       return await Category.find({ isActive: true }).sort({ createdAt: -1 });
     },
     getRestaurants: async (_, { category }) => {
+      // 1. Nếu không chọn danh mục hoặc chọn All -> Trả về tất cả
       if (!category || category === 'All') {
         return await Restaurant.find({}).populate('categories');
       }
-      const cat = await Category.findOne({ $or: [{ _id: category }, { name: category }] });
-      if (cat) {
-        return await Restaurant.find({ categories: cat._id }).populate('categories');
+
+      try {
+        // 2. Logic mới: Tìm các nhà hàng CÓ BÁN món ăn thuộc category này
+
+        // Bước A: Tìm tất cả các món ăn có category trùng khớp
+        const foods = await Food.find({ category: category });
+
+        if (!foods || foods.length === 0) {
+          return []; // Không có món nào -> Không có nhà hàng nào
+        }
+
+        // Bước B: Lấy ra danh sách ID của chủ nhà hàng (restaurantId) từ các món ăn tìm được
+        // Sử dụng Set để loại bỏ các ID trùng lặp
+        const restaurantAccountIds = [...new Set(foods.map(f => f.restaurantId.toString()))];
+
+        // Bước C: Tìm thông tin Restaurant Profile dựa trên danh sách accountId vừa lọc
+        const restaurants = await Restaurant.find({
+          accountId: { $in: restaurantAccountIds }
+        }).populate('categories');
+
+        return restaurants;
+
+      } catch (error) {
+        console.error("Lỗi getRestaurants:", error);
+        return [];
       }
-      return await Restaurant.find({}).populate('categories');
     },
     getFoods: async (_, { category }) => {
       if (!category || category === 'All') {
@@ -121,13 +143,32 @@ const resolvers = {
       return await Review.find({ foodId }).populate('userId').sort({ createdAt: -1 });
     },
     myOrders: async (_, __, context) => {
-      if (!context.user) throw new Error('Bạn chưa đăng nhập!');
-      return await Order.find({ customerId: context.user.id }).sort({ createdAt: -1 });
+      // context thường chứa userId sau khi decode token (xem file context.js hoặc middleware auth)
+      // Nếu context có user object thì dùng context.user._id hoặc context.userId tùy cách bạn setup context
+      const userId = context.userId || (context.user && context.user._id) || (context.user && context.user.id);
+
+      if (!userId) throw new Error('Bạn chưa đăng nhập!');
+
+      // Log ra để debug xem userId có nhận được không
+      console.log("Fetching orders for user:", userId);
+
+      return await Order.find({ customerId: userId }).sort({ createdAt: -1 });
+    },
+    getOrder: async (_, { id }, context) => {
+      if (!context.userId) throw new Error("Unauthorized");
+      
+      const order = await Order.findById(id);
+      if (!order) throw new Error("Không tìm thấy đơn hàng");
+      
+      // Bảo mật: Chỉ cho phép xem nếu là chủ đơn, nhà hàng, shipper hoặc admin
+      // (Ở đây demo kiểm tra đơn giản, bạn có thể mở rộng sau)
+      
+      return order;
     },
     // Query Shipper mới thêm
     getShipperProfile: async (_, __, context) => {
-       if (!context.userId) throw new Error("Unauthorized");
-       return await Shipper.findOne({ accountId: context.userId });
+      if (!context.userId) throw new Error("Unauthorized");
+      return await Shipper.findOne({ accountId: context.userId });
     },
     myCart: async (_, __, context) => {
       if (!context.userId) throw new Error("Unauthorized");
@@ -140,6 +181,25 @@ const resolvers = {
       } catch (err) {
         throw new Error("Không tìm thấy món ăn");
       }
+    },
+    getFoodsByRestaurant: async (_, { restaurantId, category }) => {
+      // Thử tìm xem restaurantId gửi lên là AccountID hay RestaurantID
+
+      // 1. Giả sử gửi lên là RestaurantID (ID của quán)
+      const restaurantDoc = await Restaurant.findById(restaurantId);
+      let targetAccountId = restaurantId;
+
+      if (restaurantDoc) {
+        // Nếu tìm thấy quán -> Lấy accountId của quán đó để tìm món ăn
+        targetAccountId = restaurantDoc.accountId;
+      }
+
+      // 2. Tìm món ăn theo restaurantId (trong Food schema, restaurantId = accountId)
+      const query = { restaurantId: targetAccountId };
+      if (category && category !== 'All') {
+        query.category = category;
+      }
+      return await Food.find(query);
     },
   },
 
@@ -162,7 +222,7 @@ const resolvers = {
         role: role || 'customer',
         isVerified: false
       });
-      
+
       const savedUser = await newUser.save(); // Lưu user để lấy _id
 
       // 3. Tự động tạo Profile dựa trên Role
@@ -200,7 +260,7 @@ const resolvers = {
         otp: otpCode,
         expiresAt: new Date(Date.now() + 5 * 60 * 1000)
       });
-      
+
       try {
         await sendEmail(email, otpCode);
       } catch (error) {
@@ -271,7 +331,7 @@ const resolvers = {
       const senderId = payload.userId;
       const order = await Order.findById(orderId);
       if (!order) throw new Error('Order not found');
-      
+
       const msg = await Message.create({ orderId, senderId, receiverId, content, messageType });
       const populated = await Message.findById(msg._id).populate('senderId', 'name avatar');
       const out = {
@@ -285,7 +345,7 @@ const resolvers = {
         isRead: populated.isRead,
         createdAt: populated.createdAt,
       };
-      
+
       try {
         const io = context?.io;
         if (io) {
@@ -326,7 +386,7 @@ const resolvers = {
       });
       return await newR.save();
     },
-    
+
     // --- Shipper Mutations ---
     createShipper: async (_, { name, image, lat, lng }, context) => {
       if (!context.userId) throw new Error("Unauthorized");
@@ -354,31 +414,31 @@ const resolvers = {
     },
 
     createCategory: async (_, { name, image }) => {
-       const cat = new Category({ name, image, isActive: true });
-       return await cat.save();
+      const cat = new Category({ name, image, isActive: true });
+      return await cat.save();
     },
     updateProfile: async (_, { name, phone, avatar, address }, context) => {
-       if(!context.userId) throw new Error("Unauthorized");
-       const updateData = {};
-       if(name) updateData.name = name;
-       if(phone) updateData.phone = phone;
-       if(avatar) updateData.avatar = avatar;
-       if(address) updateData.address = address;
-       return await User.findByIdAndUpdate(context.userId, updateData, { new: true });
+      if (!context.userId) throw new Error("Unauthorized");
+      const updateData = {};
+      if (name) updateData.name = name;
+      if (phone) updateData.phone = phone;
+      if (avatar) updateData.avatar = avatar;
+      if (address) updateData.address = address;
+      return await User.findByIdAndUpdate(context.userId, updateData, { new: true });
     },
     updateFood: async (_, args) => {
       return await Food.findByIdAndUpdate(args.id, args, { new: true });
     },
     addReview: async (_, { foodId, orderId, rating, comment }, context) => {
-       if(!context.userId) throw new Error("Unauthorized");
-       const review = new Review({
-         userId: context.userId,
-         foodId,
-         rating,
-         comment
-       });
-       await review.save();
-       return review;
+      if (!context.userId) throw new Error("Unauthorized");
+      const review = new Review({
+        userId: context.userId,
+        foodId,
+        rating,
+        comment
+      });
+      await review.save();
+      return review;
     },
     updateCart: async (_, { restaurantId, items }, context) => {
       if (!context.userId) throw new Error("Unauthorized");
@@ -393,7 +453,7 @@ const resolvers = {
       // Nghĩa là: Nếu tìm thấy thì update, không thấy thì tạo mới
       const cart = await Cart.findOneAndUpdate(
         { userId: context.userId },
-        { 
+        {
           userId: context.userId,
           restaurantId,
           items,

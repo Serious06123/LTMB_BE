@@ -54,8 +54,6 @@ const typeDefs = `#graphql
     customerId: ID
     restaurantId: ID
     shipperId: ID
-    createdAt: String  # Thêm trường này để hiển thị ngày
-    restaurant: User   # Thêm trường này để lấy thông tin quán (tên, avatar)
   }
 
   type OrderItem {
@@ -108,8 +106,6 @@ const typeDefs = `#graphql
     messages(orderId: ID!, limit: Int = 50, offset: Int = 0): [Message]
     myFoods(category: String): [Food]
     getCategories: [Category]
-    getFoodReviews(foodId: ID!): [Review]
-    myOrders: [Order]
   }
   
   # --- PHẦN QUAN TRỌNG: Mutation chứa tất cả các hàm ---

@@ -4,8 +4,10 @@ import User from '../models/User.js';
 import Otp from '../models/Otp.js';
 import Category from '../models/Category.js';
 import Message from '../models/Message.js';
-import Category from '../models/Category.js';
 import Restaurant from '../models/Restaurant.js';
+import Review from '../models/Review.js';
+import Shipper from '../models/Shipper.js'; 
+import Cart from '../models/Cart.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import sendEmail from '../utils/sendEmail.js';
@@ -17,10 +19,8 @@ const resolvers = {
     }
   },
 
-  // --- GỘP TẤT CẢ LOGIC CỦA ORDER VÀO ĐÂY ---
   Order: {
     restaurant: async (parent) => {
-      // Tìm User đóng vai trò là quán ăn dựa trên restaurantId
       return await User.findById(parent.restaurantId);
     },
     customerUser: async (parent) => {
@@ -39,17 +39,13 @@ const resolvers = {
       return await Category.find({ isActive: true }).sort({ createdAt: -1 });
     },
     getRestaurants: async (_, { category }) => {
-      // If category param is provided, find restaurants that have that category id or name
       if (!category || category === 'All') {
         return await Restaurant.find({}).populate('categories');
       }
-
-      // Try to accept either category id or name
       const cat = await Category.findOne({ $or: [{ _id: category }, { name: category }] });
       if (cat) {
         return await Restaurant.find({ categories: cat._id }).populate('categories');
       }
-
       return await Restaurant.find({}).populate('categories');
     },
     getFoods: async (_, { category }) => {
@@ -68,22 +64,14 @@ const resolvers = {
       });
     },
     myShippingOrders: async (_, __, context) => {
-      // 1. Kiểm tra đăng nhập
-      if (!context.userId) {
-        throw new Error("Bạn chưa đăng nhập!");
-      }
-
-      // 2. Tìm đơn hàng mà shipperId trùng với người đang login
-      // Thêm .sort({ createdAt: -1 }) để đơn mới nhất hiện lên đầu
+      if (!context.userId) throw new Error("Bạn chưa đăng nhập!");
       return await Order.find({
         shipperId: context.userId,
         status: { $in: ['shipping', 'delivered', 'completed', 'cancelled'] }
       }).sort({ createdAt: -1 });
     },
     me: async (_, __, context) => {
-      if (!context.userId) {
-        throw new Error("Bạn chưa đăng nhập!");
-      }
+      if (!context.userId) throw new Error("Bạn chưa đăng nhập!");
       return await User.findById(context.userId);
     },
     messages: async (_, { orderId, limit = 50, offset = 0 }) => {
@@ -105,17 +93,12 @@ const resolvers = {
       }));
     },
     myFoods: async (_, { category }, context) => {
-      if (!context.userId) {
-        throw new Error("Bạn chưa đăng nhập!");
-      }
+      if (!context.userId) throw new Error("Bạn chưa đăng nhập!");
       const query = { restaurantId: context.userId };
       if (category && category !== 'All') {
         query.category = category;
       }
       return await Food.find(query).sort({ createdAt: -1 });
-    },
-    getCategories: async () => {
-      return await Category.find({ isActive: true });
     },
     getUserProfile: async (_, { id }) => {
       try {
@@ -132,14 +115,86 @@ const resolvers = {
     },
     myOrders: async (_, __, context) => {
       if (!context.user) throw new Error('Bạn chưa đăng nhập!');
-      const orders = await Order.find({ customerId: context.user.id })
-        .sort({ createdAt: -1 });
-      return orders;
+      return await Order.find({ customerId: context.user.id }).sort({ createdAt: -1 });
+    },
+    // Query Shipper mới thêm
+    getShipperProfile: async (_, __, context) => {
+       if (!context.userId) throw new Error("Unauthorized");
+       return await Shipper.findOne({ accountId: context.userId });
+    },
+    myCart: async (_, __, context) => {
+      if (!context.userId) throw new Error("Unauthorized");
+      // Tìm giỏ hàng, nếu chưa có thì trả về null hoặc object rỗng tùy ý
+      return await Cart.findOne({ userId: context.userId });
     },
   },
 
   Mutation: {
-    // ... Giữ nguyên code Mutation cũ của bạn ...
+    // --- SỬA LOGIC REGISTER ---
+    register: async (_, { name, email, password, phone, role }) => {
+      // 1. Kiểm tra tồn tại
+      const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
+      if (existingUser) {
+        throw new Error('Email hoặc số điện thoại đã được sử dụng!');
+      }
+
+      // 2. Tạo User
+      const hashedPassword = await bcrypt.hash(password, 12);
+      const newUser = new User({
+        name,
+        email,
+        phone,
+        password: hashedPassword,
+        role: role || 'customer',
+        isVerified: false
+      });
+      
+      const savedUser = await newUser.save(); // Lưu user để lấy _id
+
+      // 3. Tự động tạo Profile dựa trên Role
+      try {
+        if (role === 'restaurant') {
+          await Restaurant.create({
+            name: name, // Lấy tên user làm tên quán mặc định
+            accountId: savedUser._id,
+            image: '',
+            address: {},
+            categories: [], // Mảng rỗng ban đầu
+            isOpen: true,
+            deliveryTime: '30 min',
+            deliveryFee: 15000 // Phí mặc định
+          });
+        } else if (role === 'shipper') {
+          await Shipper.create({
+            name: name,
+            accountId: savedUser._id,
+            image: '',
+            address: { lat: 0, lng: 0 },
+            isActive: true
+          });
+        }
+      } catch (err) {
+        console.error("Lỗi khi tạo profile phụ:", err);
+        // Không throw error để user vẫn đăng ký được tài khoản chính, 
+        // có thể bổ sung profile sau.
+      }
+
+      // 4. Tạo OTP và gửi mail (Logic cũ)
+      const otpCode = Math.floor(1000 + Math.random() * 9000).toString();
+      await Otp.create({
+        email,
+        otp: otpCode,
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000)
+      });
+      
+      try {
+        await sendEmail(email, otpCode);
+      } catch (error) {
+        console.error("Gửi mail lỗi:", error);
+      }
+      return "Đăng ký thành công! Vui lòng kiểm tra Email để lấy mã OTP.";
+    },
+
     login: async (_, { identifier, email, password }) => {
       const lookup = identifier || email;
       if (!lookup) throw new Error('Vui lòng cung cấp email hoặc identifier');
@@ -158,34 +213,6 @@ const resolvers = {
         { expiresIn: '7d' }
       );
       return { token, user, success: true, error: null };
-    },
-    register: async (_, { name, email, password, phone, role }) => {
-      const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
-      if (existingUser) {
-        throw new Error('Email hoặc số điện thoại đã được sử dụng!');
-      }
-      const hashedPassword = await bcrypt.hash(password, 12);
-      const newUser = new User({
-        name,
-        email,
-        phone,
-        password: hashedPassword,
-        role: role || 'customer',
-        isVerified: false
-      });
-      await newUser.save();
-      const otpCode = Math.floor(1000 + Math.random() * 9000).toString();
-      await Otp.create({
-        email,
-        otp: otpCode,
-        expiresAt: new Date(Date.now() + 5 * 60 * 1000)
-      });
-      try {
-        await sendEmail(email, otpCode);
-      } catch (error) {
-        console.error("Gửi mail lỗi:", error);
-      }
-      return "Đăng ký thành công! Vui lòng kiểm tra Email để lấy mã OTP.";
     },
     verifyOtp: async (_, { email, otp }) => {
       const otpRecord = await Otp.findOne({ email, otp });
@@ -230,9 +257,7 @@ const resolvers = {
       const senderId = payload.userId;
       const order = await Order.findById(orderId);
       if (!order) throw new Error('Order not found');
-      const isValidPair = (senderId.toString() === order.customerId.toString() && receiverId === order.shipperId?.toString()) ||
-        (senderId.toString() === order.shipperId?.toString() && receiverId === order.customerId.toString());
-      if (!isValidPair) throw new Error('Invalid sender/receiver for this order');
+      
       const msg = await Message.create({ orderId, senderId, receiverId, content, messageType });
       const populated = await Message.findById(msg._id).populate('senderId', 'name avatar');
       const out = {
@@ -246,15 +271,13 @@ const resolvers = {
         isRead: populated.isRead,
         createdAt: populated.createdAt,
       };
+      
       try {
         const io = context?.io;
         if (io) {
-          const room = `order_${orderId}`;
-          io.to(room).emit('message_received', out);
+          io.to(`order_${orderId}`).emit('message_received', out);
         }
-      } catch (e) {
-        console.error('Emit error', e);
-      }
+      } catch (e) { console.error('Emit error', e); }
       return out;
     },
     markMessagesRead: async (_, { orderId, userId }) => {
@@ -262,9 +285,7 @@ const resolvers = {
       return true;
     },
     createFood: async (_, args, context) => {
-      if (!context.userId) {
-        throw new Error("Bạn chưa đăng nhập (Unauthorized)!");
-      }
+      if (!context.userId) throw new Error("Unauthorized");
       try {
         const newFood = new Food({
           name: args.name,
@@ -275,13 +296,10 @@ const resolvers = {
           restaurantId: context.userId
         });
         return await newFood.save();
-      } catch (error) {
-        throw new Error("Lỗi tạo món: " + error.message);
-      }
+      } catch (error) { throw new Error(error.message); }
     },
     createRestaurant: async (_, args, context) => {
       if (!context.userId) throw new Error('Unauthorized');
-
       const newR = new Restaurant({
         name: args.name,
         accountId: context.userId,
@@ -292,10 +310,90 @@ const resolvers = {
         deliveryTime: args.deliveryTime || '',
         deliveryFee: args.deliveryFee || 0,
       });
-
       return await newR.save();
     },
     
+    // --- Shipper Mutations ---
+    createShipper: async (_, { name, image, lat, lng }, context) => {
+      if (!context.userId) throw new Error("Unauthorized");
+      const existingShipper = await Shipper.findOne({ accountId: context.userId });
+      if (existingShipper) throw new Error("Tài khoản này đã đăng ký làm Shipper rồi!");
+
+      const newShipper = new Shipper({
+        name,
+        image,
+        accountId: context.userId,
+        address: { lat: lat || 0, lng: lng || 0 },
+        isActive: true
+      });
+      return await newShipper.save();
+    },
+    updateShipperStatus: async (_, { isActive }, context) => {
+      if (!context.userId) throw new Error("Unauthorized");
+      const shipper = await Shipper.findOneAndUpdate(
+        { accountId: context.userId },
+        { isActive },
+        { new: true }
+      );
+      if (!shipper) throw new Error("Không tìm thấy thông tin Shipper");
+      return shipper;
+    },
+
+    createCategory: async (_, { name, image }) => {
+       const cat = new Category({ name, image, isActive: true });
+       return await cat.save();
+    },
+    updateProfile: async (_, { name, phone, avatar, address }, context) => {
+       if(!context.userId) throw new Error("Unauthorized");
+       const updateData = {};
+       if(name) updateData.name = name;
+       if(phone) updateData.phone = phone;
+       if(avatar) updateData.avatar = avatar;
+       if(address) updateData.address = address;
+       return await User.findByIdAndUpdate(context.userId, updateData, { new: true });
+    },
+    updateFood: async (_, args) => {
+      return await Food.findByIdAndUpdate(args.id, args, { new: true });
+    },
+    addReview: async (_, { foodId, orderId, rating, comment }, context) => {
+       if(!context.userId) throw new Error("Unauthorized");
+       const review = new Review({
+         userId: context.userId,
+         foodId,
+         rating,
+         comment
+       });
+       await review.save();
+       return review;
+    },
+    updateCart: async (_, { restaurantId, items }, context) => {
+      if (!context.userId) throw new Error("Unauthorized");
+
+      // Tính tổng tiền luôn phía server cho an toàn
+      let total = 0;
+      items.forEach(item => {
+        total += item.price * item.quantity;
+      });
+
+      // Dùng findOneAndUpdate với option upsert: true
+      // Nghĩa là: Nếu tìm thấy thì update, không thấy thì tạo mới
+      const cart = await Cart.findOneAndUpdate(
+        { userId: context.userId },
+        { 
+          userId: context.userId,
+          restaurantId,
+          items,
+          totalAmount: total
+        },
+        { new: true, upsert: true } // upsert: true là chìa khóa
+      );
+      return cart;
+    },
+    clearCart: async (_, __, context) => {
+      if (!context.userId) throw new Error("Unauthorized");
+      await Cart.findOneAndDelete({ userId: context.userId });
+      return true;
+    }
   },
 };
 

@@ -1,12 +1,14 @@
 const typeDefs = `#graphql
 
-  # 1. Định nghĩa kiểu Address
+  # 1. Định nghĩa kiểu Address (Output)
   type Address {
     street: String
     city: String
     lat: Float
     lng: Float
   }
+  
+  # 2. Định nghĩa kiểu AddressInput (Input - Dùng cho Mutation)
   input AddressInput {
     street: String
     city: String
@@ -14,14 +16,16 @@ const typeDefs = `#graphql
     lng: Float
   }
 
-  # --- Định nghĩa Category ---
   type Category {
-    id: ID!
+    _id: ID!
+    id: ID
     name: String!
     image: String
+    isActive: Boolean
+    createdAt: String
+    updatedAt: String
   }
 
-  # 2. User Type đầy đủ
   type User {
     id: ID!
     name: String
@@ -47,7 +51,6 @@ const typeDefs = `#graphql
     restaurantId: ID
   }
 
-  # --- CẬP NHẬT: Thêm các trường quan hệ cho Order ---
   type Order {
     id: ID!
     totalAmount: Float
@@ -58,7 +61,6 @@ const typeDefs = `#graphql
     shipperId: ID
     createdAt: String       
     shippingAddress: Address
-    # Các trường resolve từ User/Food
     customerUser: User
     restaurantUser: User
     restaurantFood: Food
@@ -97,6 +99,7 @@ const typeDefs = `#graphql
     isRead: Boolean
     createdAt: String
   }
+  
   type Review {
     id: ID!
     userId: ID!
@@ -105,15 +108,6 @@ const typeDefs = `#graphql
     comment: String
     createdAt: String
     user: User 
-  }
-
-  type Category {
-    _id: ID!
-    name: String!
-    image: String
-    isActive: Boolean
-    createdAt: String
-    updatedAt: String
   }
 
   type Restaurant {
@@ -131,9 +125,43 @@ const typeDefs = `#graphql
     createdAt: String
     updatedAt: String
   }
+  type Shipper {
+    _id: ID!
+    name: String!
+    accountId: ID
+    rating: Float
+    reviews: Int
+    image: String
+    address: Address # Tái sử dụng type Address (chỉ cần trả về lat/lng)
+    isActive: Boolean
+    createdAt: String
+    updatedAt: String
+  }
+  type CartItem {
+    foodId: ID
+    name: String
+    price: Float
+    quantity: Int
+    image: String
+  }
 
+  type Cart {
+    _id: ID!
+    userId: ID
+    restaurantId: ID
+    items: [CartItem]
+    totalAmount: Float
+    updatedAt: String
+  }
+
+  input CartItemInput {
+    foodId: ID!
+    name: String
+    price: Float
+    quantity: Int!
+    image: String
+  }
   type Query {
-    # Categories for home / filters
     getCategories: [Category]
     getFoods(category: String): [Food]
     getRestaurants(category: String): [Restaurant]
@@ -142,18 +170,17 @@ const typeDefs = `#graphql
     getUserProfile(id: ID!): User
     messages(orderId: ID!, limit: Int = 50, offset: Int = 0): [Message]
     myFoods(category: String): [Food]
-    getCategories: [Category]
     myShippingOrders: [Order]
     me: User
     getFoodReviews(foodId: ID!): [Review]
     myOrders: [Order]
+    getShipperProfile: Shipper
+    myCart: Cart
   }
   
   type Mutation {
-    # Login nhận identifier (email hoặc phone). Backwards-compatible: accepts identifier or email.
     login(identifier: String, email: String, password: String!): AuthPayload
 
-    # Register
     register(
       name: String!, 
       email: String!, 
@@ -162,17 +189,13 @@ const typeDefs = `#graphql
       role: String
     ): String
 
-    # Verify OTP
     verifyOtp(email: String!, otp: String!): AuthPayload
     
-    # Change Password
     changePassword(email: String!, newPassword: String!): DefaultResponse
 
-    # Messages
     sendMessage(orderId: ID!, receiverId: ID!, content: String!, messageType: String): Message
     markMessagesRead(orderId: ID!, userId: ID!): Boolean
     
-    # --- createFood ---
     createFood(
       name: String!
       price: Float!
@@ -180,17 +203,18 @@ const typeDefs = `#graphql
       image: String
       category: String!
     ): Food
+    
+    # --- ĐÃ SỬA: address: Address -> address: AddressInput ---
     createRestaurant(
       name: String!
       categories: [ID]
       image: String
-      address: Address
+      address: AddressInput  
       isOpen: Boolean
       deliveryTime: String
       deliveryFee: Float
     ): Restaurant
     
-    # --- updateFood ---
     updateFood(
       id: ID!
       name: String
@@ -201,10 +225,8 @@ const typeDefs = `#graphql
       isAvailable: Boolean 
     ): Food
     
-    # --- Quản lý Category ---
     createCategory(name: String!, image: String): Category
     
-    # --- Cập nhật thông tin cá nhân ---
     updateProfile(
       name: String
       phone: String
@@ -218,6 +240,21 @@ const typeDefs = `#graphql
       rating: Int!
       comment: String
     ): Review
+    createShipper(
+      name: String!
+      image: String
+      lat: Float
+      lng: Float
+    ): Shipper
+    
+    updateShipperStatus(isActive: Boolean!): Shipper
+    updateCart(
+      restaurantId: ID!
+      items: [CartItemInput]!
+    ): Cart
+    
+    # Xóa sạch giỏ hàng (sau khi đặt đơn xong)
+    clearCart: Boolean
   }
 `;
 

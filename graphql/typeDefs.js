@@ -149,7 +149,7 @@ const typeDefs = `#graphql
   type Cart {
     _id: ID!
     userId: ID
-    restaurantId: ID
+    restaurantId: Restaurant
     items: [CartItem]
     totalAmount: Float
     updatedAt: String
@@ -280,6 +280,13 @@ const typeDefs = `#graphql
     ): Cart
     createOrder(input: CreateOrderInput!): Order
     updateRestaurantStatus(isOpen: Boolean!): Restaurant
+    updateOrderStatus(orderId: ID!, status: String!): Order
+    # Shipper nhận đơn
+    shipperAcceptOrder(orderId: ID!): Order
+    # Shipper cập nhật trạng thái (Giao xong hoặc Hủy)
+    shipperUpdateStatus(orderId: ID!, status: String!): Order
+    customerCompleteOrder(orderId: ID!): Order
+    addToCart(foodId: ID!, quantity: Int!, restaurantId: ID!): Cart
   }
 `;
 

@@ -83,8 +83,26 @@ const resolvers = {
       }
       return await Food.find({ category });
     },
-    getRunningOrders: async () => {
-      return await Order.find({ status: { $in: ['preparing',] } });
+    getRunningOrders: async (_, __, context) => {
+      // 1. Kiểm tra quyền (User phải đăng nhập)
+      if (!context.userId) throw new Error("Unauthorized");
+
+      // 2. Điều kiện lọc:
+      // - status: 'preparing' (Quán đang làm hoặc đã làm xong)
+      // - shipperId: null hoặc không tồn tại (Chưa có ai nhận)
+      const filter = {
+        status: 'preparing', // Hoặc ['preparing', 'ready'] tùy logic bạn
+        $or: [
+            { shipperId: { $exists: false } }, 
+            { shipperId: null }
+        ]
+      };
+
+      // 3. Trả về kết quả (Mới nhất lên đầu)
+      return await Order.find(filter)
+        .populate('restaurantId') // Populate thông tin quán để hiển thị địa chỉ quán
+        .populate('customerId')   // Populate thông tin khách để hiển thị địa chỉ giao
+        .sort({ createdAt: -1 });
     },
     myRunningOrders: async (_, { userId }) => {
       return await Order.find({
@@ -94,10 +112,13 @@ const resolvers = {
     },
     myShippingOrders: async (_, __, context) => {
       if (!context.userId) throw new Error("Bạn chưa đăng nhập!");
+      
       return await Order.find({
         shipperId: context.userId,
-        status: { $in: ['shipping', 'delivered', 'completed', 'cancelled'] }
-      }).sort({ createdAt: -1 });
+        // Lấy cả đơn đang chuẩn bị và đơn đang giao/đã giao
+        status: { $in: ['preparing', 'shipping', 'delivered', 'completed', 'cancelled'] }
+      })
+      .sort({ createdAt: -1 });
     },
     me: async (_, __, context) => {
       if (!context.userId) throw new Error("Bạn chưa đăng nhập!");
@@ -169,8 +190,12 @@ const resolvers = {
     },
     myCart: async (_, __, context) => {
       if (!context.userId) throw new Error("Unauthorized");
-      // Tìm giỏ hàng, nếu chưa có thì trả về null hoặc object rỗng tùy ý
-      return await Cart.findOne({ userId: context.userId });
+      
+      const cart = await Cart.findOne({ userId: context.userId })
+        .populate('restaurantId') // <--- QUAN TRỌNG: Lấy thông tin nhà hàng
+        .populate('items.foodId'); 
+
+      return cart;
     },
     getFood: async (_, { id }) => {
       try {
@@ -216,16 +241,25 @@ const resolvers = {
     myRestaurantOrders: async (_, { status }, context) => {
       if (!context.userId) throw new Error("Unauthorized");
 
-      const filter = { restaurantId: context.userId };
+      // --- SỬA LỖI TẠI ĐÂY ---
+      // 1. Tìm thông tin Quán (Restaurant) dựa trên tài khoản đang đăng nhập (User ID)
+      const restaurantProfile = await Restaurant.findOne({ accountId: context.userId });
 
-      // Nếu có status thì lọc, ví dụ: 'pending', 'preparing'
+      // 2. Xác định ID cần tìm kiếm trong bảng Order
+      // Nếu tìm thấy quán -> Lấy _id của quán.
+      // Nếu không thấy (trường hợp dữ liệu cũ) -> Dùng tạm userId.
+      const targetId = restaurantProfile ? restaurantProfile._id : context.userId;
+
+      console.log("👉 Fetching orders for Restaurant ID:", targetId); // Log để debug
+
+      const filter = { restaurantId: targetId };
+
+      // Nếu có status thì lọc
       if (status && status !== 'All') {
-        // Có thể dùng $in nếu muốn lọc nhiều trạng thái
         filter.status = status;
       }
 
       return await Order.find(filter)
-        .populate('customerUser') // Để lấy tên khách hàng
         .sort({ createdAt: -1 }); // Mới nhất lên đầu
     },
     getAllShippers: async (_, __, context) => {
@@ -566,7 +600,146 @@ const resolvers = {
       );
       if (!restaurant) throw new Error("Không tìm thấy thông tin Quán");
       return restaurant;
-    }
+    },
+    updateOrderStatus: async (_, { orderId, status }, context) => {
+      if (!context.userId) throw new Error("Unauthorized");
+
+      const restaurantProfile = await Restaurant.findOne({ accountId: context.userId });
+      if (!restaurantProfile) throw new Error("Bạn không phải là chủ nhà hàng!");
+
+      const order = await Order.findOne({ _id: orderId, restaurantId: restaurantProfile._id });
+      if (!order) throw new Error("Không tìm thấy đơn hàng!");
+
+      // --- THÊM ĐIỀU KIỆN KIỂM TRA ---
+      // Nếu nhà hàng muốn chuyển sang 'shipping', phải kiểm tra đã có Shipper chưa
+      if (status === 'shipping') {
+          if (!order.shipperId) {
+              throw new Error("Chưa có tài xế nhận đơn! Vui lòng chờ tài xế.");
+          }
+      }
+
+      order.status = status;
+      
+      // Logic gửi socket thông báo (nếu có)
+      try {
+        const io = context?.io;
+        if (io) io.to(`order_${orderId}`).emit('order_status_updated', order);
+      } catch (e) { console.error(e); }
+
+      return await order.save();
+    },
+    shipperAcceptOrder: async (_, { orderId }, context) => {
+      if (!context.userId) throw new Error("Unauthorized");
+      
+      // Kiểm tra xem user này có phải Shipper không
+      const shipperProfile = await Shipper.findOne({ accountId: context.userId });
+      if (!shipperProfile || !shipperProfile.isActive) {
+        throw new Error("Bạn không phải là Shipper hoặc tài khoản đang bị khóa!");
+      }
+
+      // Tìm đơn hàng đang 'preparing' và chưa có shipper
+      const order = await Order.findOne({ _id: orderId, status: 'preparing' });
+      if (!order) throw new Error("Đơn hàng không khả dụng hoặc đã có người nhận!");
+
+      order.shipperId = context.userId; // Lưu ID user của shipper
+      return await order.save();
+    },
+    shipperUpdateStatus: async (_, { orderId, status }, context) => {
+       if (!context.userId) throw new Error("Unauthorized");
+
+       // Chỉ shipper sở hữu đơn này mới được update
+       const order = await Order.findOne({ _id: orderId, shipperId: context.userId });
+       if (!order) throw new Error("Không tìm thấy đơn hàng của bạn!");
+
+       if (!['delivered', 'cancelled'].includes(status)) {
+         throw new Error("Trạng thái không hợp lệ");
+       }
+
+       // --- LOGIC MỚI: CỘNG TIỀN VÀO VÍ ---
+       // Nếu trạng thái mới là 'delivered' và trạng thái cũ CHƯA PHẢI là 'delivered' (tránh cộng nhiều lần)
+       if (status === 'delivered' && order.status !== 'delivered') {
+           order.paymentStatus = 'paid'; // Đánh dấu đã thanh toán (nếu cần)
+           
+           // Cộng 15.000đ vào ví Shipper (User model)
+           const DELIVERY_FEE = 15000; 
+           await User.findByIdAndUpdate(context.userId, { 
+               $inc: { walletBalance: DELIVERY_FEE } 
+           });
+       }
+
+       order.status = status;
+       return await order.save();
+    },
+    customerCompleteOrder: async (_, { orderId }, context) => {
+      if (!context.userId) throw new Error("Unauthorized");
+
+      // Tìm đơn hàng của chính khách hàng đó
+      const order = await Order.findOne({ _id: orderId, customerId: context.userId });
+      
+      if (!order) throw new Error("Không tìm thấy đơn hàng!");
+
+      // Chỉ cho phép hoàn tất khi đơn đang ở trạng thái 'delivered'
+      if (order.status !== 'delivered') {
+        throw new Error("Đơn hàng chưa được giao, không thể hoàn tất!");
+      }
+
+      order.status = 'completed';
+      return await order.save();
+    },
+    addToCart: async (_, { foodId, quantity, restaurantId }, context) => {
+      if (!context.userId) throw new Error("Unauthorized");
+
+      // 1. Tìm hoặc tạo giỏ hàng
+      let cart = await Cart.findOne({ userId: context.userId });
+      
+      if (!cart) {
+        cart = new Cart({
+          userId: context.userId,
+          restaurantId: restaurantId,
+          items: [],
+          totalAmount: 0
+        });
+      }
+
+      // --- LOGIC TRỘN GIỎ HÀNG ---
+      // Luôn cập nhật restaurantId thành quán mới nhất vừa thêm
+      // (Để Frontend hiển thị tên quán này ở đầu giỏ)
+      cart.restaurantId = restaurantId; 
+
+      // 2. Xử lý thêm/cộng dồn món ăn
+      const itemIndex = cart.items.findIndex(p => p.foodId.toString() === foodId);
+      
+      const foodInfo = await Food.findById(foodId);
+      if (!foodInfo) throw new Error("Món ăn không tồn tại");
+
+      if (itemIndex > -1) {
+        cart.items[itemIndex].quantity += quantity;
+      } else {
+        cart.items.push({
+          foodId: foodId,
+          name: foodInfo.name,
+          price: foodInfo.price,
+          quantity: quantity,
+          image: foodInfo.image
+        });
+      }
+
+      // 3. Tính tổng tiền
+      let total = 0;
+      for (const item of cart.items) {
+          total += item.price * item.quantity;
+      }
+      cart.totalAmount = total;
+
+      await cart.save();
+      
+      // --- QUAN TRỌNG: POPULATE CẢ RESTAURANT ---
+      // Phải populate restaurantId thì typeDefs mới trả về object Restaurant được
+      return await cart.populate([
+          { path: 'items.foodId' },
+          { path: 'restaurantId' }
+      ]);
+    },
   },
 };
 

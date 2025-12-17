@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const orderSchema = new mongoose.Schema({
   customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // Đơn hàng thuộc về nhà hàng nào
+  restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', required: true }, // Đơn hàng thuộc về nhà hàng nào
   shipperId: { type: mongoose.Schema.Types.ObjectId, ref:   'User' }, // Có thể null lúc mới đặt
   
   totalAmount: { type: Number, required: true },

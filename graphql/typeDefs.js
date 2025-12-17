@@ -14,12 +14,13 @@ const typeDefs = `#graphql
     lng: Float
   }
 
-  # --- THÊM: Định nghĩa Category ---
+  # --- Định nghĩa Category ---
   type Category {
     id: ID!
     name: String!
     image: String
   }
+
   # 2. User Type đầy đủ
   type User {
     id: ID!
@@ -46,6 +47,7 @@ const typeDefs = `#graphql
     restaurantId: ID
   }
 
+  # --- CẬP NHẬT: Thêm các trường quan hệ cho Order ---
   type Order {
     id: ID!
     totalAmount: Float
@@ -54,6 +56,13 @@ const typeDefs = `#graphql
     customerId: ID
     restaurantId: ID
     shipperId: ID
+    createdAt: String       
+    shippingAddress: Address
+    # Các trường resolve từ User/Food
+    customerUser: User
+    restaurantUser: User
+    restaurantFood: Food
+    restaurant: User
   }
 
   type OrderItem {
@@ -98,6 +107,7 @@ const typeDefs = `#graphql
     user: User 
   }
 
+  # --- CẬP NHẬT: Bổ sung các Query còn thiếu ---
   type Query {
     getFoods(category: String): [Food]
     getRunningOrders: [Order]
@@ -106,9 +116,12 @@ const typeDefs = `#graphql
     messages(orderId: ID!, limit: Int = 50, offset: Int = 0): [Message]
     myFoods(category: String): [Food]
     getCategories: [Category]
+    myShippingOrders: [Order]
+    me: User
+    getFoodReviews(foodId: ID!): [Review]
+    myOrders: [Order]
   }
   
-  # --- PHẦN QUAN TRỌNG: Mutation chứa tất cả các hàm ---
   type Mutation {
     # Login
     login(identifier: String!, password: String!): AuthPayload
@@ -131,6 +144,7 @@ const typeDefs = `#graphql
     # Messages
     sendMessage(orderId: ID!, receiverId: ID!, content: String!, messageType: String): Message
     markMessagesRead(orderId: ID!, userId: ID!): Boolean
+    
     # --- createFood ---
     createFood(
       name: String!
@@ -139,6 +153,7 @@ const typeDefs = `#graphql
       image: String
       category: String!
     ): Food
+    
     # --- updateFood ---
     updateFood(
       id: ID!
@@ -149,15 +164,18 @@ const typeDefs = `#graphql
       category: String
       isAvailable: Boolean 
     ): Food
-    # --- THÊM: Quản lý Category (Chỉ Admin hoặc chạy script tạo) ---
+    
+    # --- Quản lý Category ---
     createCategory(name: String!, image: String): Category
-    # --- THÊM: Cập nhật thông tin cá nhân ---
+    
+    # --- Cập nhật thông tin cá nhân ---
     updateProfile(
       name: String
       phone: String
       avatar: String
       address: AddressInput
     ): User
+    
     addReview(
       foodId: ID!
       orderId: ID!

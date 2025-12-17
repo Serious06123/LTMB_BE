@@ -156,13 +156,10 @@ const resolvers = {
     },
     getOrder: async (_, { id }, context) => {
       if (!context.userId) throw new Error("Unauthorized");
-      
+
       const order = await Order.findById(id);
       if (!order) throw new Error("Không tìm thấy đơn hàng");
-      
-      // Bảo mật: Chỉ cho phép xem nếu là chủ đơn, nhà hàng, shipper hoặc admin
-      // (Ở đây demo kiểm tra đơn giản, bạn có thể mở rộng sau)
-      
+
       return order;
     },
     // Query Shipper mới thêm
@@ -202,34 +199,39 @@ const resolvers = {
       return await Food.find(query);
     },
     myRestaurantProfile: async (_, __, context) => {
-       // 1. Kiểm tra xem User ID có nhận được từ token không
-       console.log("👉 Login User ID:", context.userId); 
+      // 1. Kiểm tra xem User ID có nhận được từ token không
+      console.log("👉 Login User ID:", context.userId);
 
-       if (!context.userId) throw new Error("Unauthorized");
-       
-       // 2. Log lệnh tìm kiếm
-       const restaurant = await Restaurant.findOne({ accountId: context.userId });
-       
-       // 3. Kiểm tra kết quả
-       console.log("👉 Found Restaurant:", restaurant); 
+      if (!context.userId) throw new Error("Unauthorized");
 
-       return restaurant;
+      // 2. Log lệnh tìm kiếm
+      const restaurant = await Restaurant.findOne({ accountId: context.userId });
+
+      // 3. Kiểm tra kết quả
+      console.log("👉 Found Restaurant:", restaurant);
+
+      return restaurant;
     },
 
     myRestaurantOrders: async (_, { status }, context) => {
-       if (!context.userId) throw new Error("Unauthorized");
-       
-       const filter = { restaurantId: context.userId };
-       
-       // Nếu có status thì lọc, ví dụ: 'pending', 'preparing'
-       if (status && status !== 'All') {
-          // Có thể dùng $in nếu muốn lọc nhiều trạng thái
-          filter.status = status; 
-       }
-       
-       return await Order.find(filter)
-         .populate('customerUser') // Để lấy tên khách hàng
-         .sort({ createdAt: -1 }); // Mới nhất lên đầu
+      if (!context.userId) throw new Error("Unauthorized");
+
+      const filter = { restaurantId: context.userId };
+
+      // Nếu có status thì lọc, ví dụ: 'pending', 'preparing'
+      if (status && status !== 'All') {
+        // Có thể dùng $in nếu muốn lọc nhiều trạng thái
+        filter.status = status;
+      }
+
+      return await Order.find(filter)
+        .populate('customerUser') // Để lấy tên khách hàng
+        .sort({ createdAt: -1 }); // Mới nhất lên đầu
+    },
+    getAllShippers: async (_, __, context) => {
+      // Bạn có thể thêm kiểm tra quyền Admin ở đây nếu cần
+      const shippers = await Shipper.find({});
+      return shippers;
     },
   },
 
@@ -497,10 +499,11 @@ const resolvers = {
       if (!context.userId) throw new Error('Unauthorized');
       const { restaurantId, items, totalAmount, paymentMethod, shippingAddress } = input;
       if (!restaurantId) throw new Error('restaurantId required');
-
+      const shipper = await Shipper.find({});
       const orderData = {
         customerId: context.userId,
         restaurantId,
+        shipperId : shipper.length > 0 ? shipper[0]._id : shipper[0]._id,
         items: items || [],
         totalAmount: totalAmount || 0,
         paymentMethod: paymentMethod === 'ONLINE' ? 'ONLINE' : 'COD',

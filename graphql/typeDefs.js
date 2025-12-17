@@ -173,6 +173,7 @@ const typeDefs = `#graphql
 
   input CreateOrderInput {
     restaurantId: ID!
+    shipperId: ID!
     items: [CreateOrderItemInput]!
     totalAmount: Float!
     paymentMethod: String
@@ -200,6 +201,7 @@ const typeDefs = `#graphql
     myRestaurantProfile: Restaurant
     # Lấy đơn hàng của quán (có thể lọc theo trạng thái)
     myRestaurantOrders(status: String): [Order]
+    getAllShippers: [Shipper]
   }
   
   type Mutation {

@@ -149,7 +149,7 @@ const typeDefs = `#graphql
   type Cart {
     _id: ID!
     userId: ID
-    restaurantId: Restaurant
+    restaurantId: ID
     items: [CartItem]
     totalAmount: Float
     updatedAt: String
@@ -275,7 +275,7 @@ const typeDefs = `#graphql
     
     updateShipperStatus(isActive: Boolean!): Shipper
     updateCart(
-      restaurantId: ID!
+      restaurantId: ID
       items: [CartItemInput]!
     ): Cart
     createOrder(input: CreateOrderInput!): Order

@@ -190,12 +190,26 @@ const resolvers = {
     },
     myCart: async (_, __, context) => {
       if (!context.userId) throw new Error("Unauthorized");
-      
+
       const cart = await Cart.findOne({ userId: context.userId })
         .populate('restaurantId') // <--- QUAN TRỌNG: Lấy thông tin nhà hàng
         .populate('items.foodId'); 
 
-      return cart;
+      if (!cart) return null;
+
+      // If items.foodId was populated as a Food object, GraphQL expects an ID scalar.
+      // Convert populated food objects to their _id values to match typeDefs (CartItem.foodId: ID).
+      const cartObj = cart.toObject ? cart.toObject() : cart;
+      if (Array.isArray(cartObj.items)) {
+        cartObj.items = cartObj.items.map(item => {
+          if (item.foodId && typeof item.foodId === 'object') {
+            return { ...item, foodId: item.foodId._id };
+          }
+          return item;
+        });
+      }
+
+      return cartObj;
     },
     getFood: async (_, { id }) => {
       try {

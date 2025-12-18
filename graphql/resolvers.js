@@ -192,7 +192,7 @@ const resolvers = {
       if (!context.userId) throw new Error("Unauthorized");
 
       const cart = await Cart.findOne({ userId: context.userId })
-        .populate('restaurantId') // <--- QUAN TRỌNG: Lấy thông tin nhà hàng
+        .populate('restaurantId')
         .populate('items.foodId'); 
 
       if (!cart) return null;

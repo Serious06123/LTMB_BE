@@ -74,6 +74,7 @@ const typeDefs = `#graphql
     price: Float
     quantity: Int
     image: String
+    restaurantId: ID
   }
 
   type AuthPayload {
@@ -150,7 +151,6 @@ const typeDefs = `#graphql
   type Cart {
     _id: ID!
     userId: ID
-    restaurantId: ID
     items: [CartItem]
     totalAmount: Float
     updatedAt: String
@@ -172,6 +172,7 @@ const typeDefs = `#graphql
     price: Float
     quantity: Int
     image: String
+    restaurantId: ID
   }
 
   input CreateOrderInput {
@@ -278,7 +279,6 @@ const typeDefs = `#graphql
     
     updateShipperStatus(isActive: Boolean!): Shipper
     updateCart(
-      restaurantId: ID
       items: [CartItemInput]!
     ): Cart
     createOrder(input: CreateOrderInput!): Order

@@ -191,33 +191,25 @@ const resolvers = {
     },
     myCart: async (_, __, context) => {
       if (!context.userId) throw new Error("Unauthorized");
-
       const cart = await Cart.findOne({ userId: context.userId })
-        .populate('restaurantId')
-        .populate('items.foodId'); 
+        .populate('items.foodId')
+        .populate('items.restaurantId');
 
       if (!cart) return null;
 
-      // If items.foodId was populated as a Food object, GraphQL expects an ID scalar.
-      // Convert populated food objects to their _id values to match typeDefs (CartItem.foodId: ID).
+      // Convert populated references to scalar IDs to match typeDefs
       const cartObj = cart.toObject ? cart.toObject() : cart;
       if (Array.isArray(cartObj.items)) {
         cartObj.items = cartObj.items.map(item => {
           const out = { ...item };
           if (out.foodId && typeof out.foodId === 'object') {
-            out.foodId = out.foodId._id;
+            out.foodId = out.foodId._id || out.foodId.id || null;
           }
           if (out.restaurantId && typeof out.restaurantId === 'object') {
-            // convert populated restaurant doc to its id
             out.restaurantId = out.restaurantId._id || out.restaurantId.id || null;
           }
           return out;
         });
-      }
-
-      // ensure root-level restaurantId is also an ID string if populated
-      if (cartObj.restaurantId && typeof cartObj.restaurantId === 'object') {
-        cartObj.restaurantId = cartObj.restaurantId._id || cartObj.restaurantId.id || null;
       }
 
       return cartObj;
@@ -531,14 +523,14 @@ const resolvers = {
       await review.save();
       return review;
     },
-    updateCart: async (_, { restaurantId, items }, context) => {
+    updateCart: async (_, { items }, context) => {
       if (!context.userId) throw new Error("Unauthorized");
 
       // Tính tổng tiền luôn phía server cho an toàn
       // Ensure each item has restaurantId set (fallback to provided restaurantId)
       items = (items || []).map(item => ({
         ...item,
-        restaurantId: item.restaurantId || restaurantId || null,
+        restaurantId: item.restaurantId || null,
       }));
 
       let total = 0;
@@ -620,7 +612,6 @@ const resolvers = {
             remainingItems.forEach(it => { total += (it.price || 0) * (it.quantity || 0); });
             cart.items = remainingItems;
             cart.totalAmount = total;
-            cart.restaurantId = remainingItems.length > 0 ? cart.restaurantId : null;
             await cart.save();
           }
         }
@@ -701,7 +692,6 @@ const resolvers = {
             // leave cart empty or delete depending on business rule
             cart.items = [];
             cart.totalAmount = 0;
-            cart.restaurantId = null;
             await cart.save();
           } else {
             let total = 0;
@@ -821,16 +811,13 @@ const resolvers = {
       if (!cart) {
         cart = new Cart({
           userId: context.userId,
-          restaurantId: restaurantId,
           items: [],
           totalAmount: 0
         });
       }
 
       // --- LOGIC TRỘN GIỎ HÀNG ---
-      // Luôn cập nhật restaurantId thành quán mới nhất vừa thêm
-      // (Để Frontend hiển thị tên quán này ở đầu giỏ)
-      cart.restaurantId = restaurantId; 
+      // Keep `restaurantId` on each item; do not persist a root-level restaurantId on Cart model
 
       // 2. Xử lý thêm/cộng dồn món ăn
       const itemIndex = cart.items.findIndex(p => p.foodId.toString() === foodId);
@@ -859,14 +846,13 @@ const resolvers = {
       }
       cart.totalAmount = total;
 
-      await cart.save();
-      
-      // --- QUAN TRỌNG: POPULATE CẢ RESTAURANT ---
-      // Phải populate restaurantId thì typeDefs mới trả về object Restaurant được
-      return await cart.populate([
+        await cart.save();
+
+        // Populate item-level refs
+        return await cart.populate([
           { path: 'items.foodId' },
-          { path: 'restaurantId' }
-      ]);
+          { path: 'items.restaurantId' }
+        ]);
     },
   },
 };

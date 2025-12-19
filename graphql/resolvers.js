@@ -8,6 +8,7 @@ import Restaurant from '../models/Restaurant.js';
 import Review from '../models/Review.js';
 import Shipper from '../models/Shipper.js';
 import Cart from '../models/Cart.js';
+import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import sendEmail from '../utils/sendEmail.js';
@@ -192,7 +193,8 @@ const resolvers = {
       if (!context.userId) throw new Error("Unauthorized");
 
       const cart = await Cart.findOne({ userId: context.userId })
-        .populate('restaurantId') // <--- QUAN TRỌNG: Lấy thông tin nhà hàng
+        // items.restaurantId is where we store per-item restaurant reference
+        .populate('items.restaurantId')
         .populate('items.foodId'); 
 
       if (!cart) return null;
@@ -202,11 +204,21 @@ const resolvers = {
       const cartObj = cart.toObject ? cart.toObject() : cart;
       if (Array.isArray(cartObj.items)) {
         cartObj.items = cartObj.items.map(item => {
-          if (item.foodId && typeof item.foodId === 'object') {
-            return { ...item, foodId: item.foodId._id };
+          const out = { ...item };
+          if (out.foodId && typeof out.foodId === 'object') {
+            out.foodId = out.foodId._id;
           }
-          return item;
+          if (out.restaurantId && typeof out.restaurantId === 'object') {
+            // convert populated restaurant doc to its id
+            out.restaurantId = out.restaurantId._id || out.restaurantId.id || null;
+          }
+          return out;
         });
+      }
+
+      // ensure root-level restaurantId is also an ID string if populated
+      if (cartObj.restaurantId && typeof cartObj.restaurantId === 'object') {
+        cartObj.restaurantId = cartObj.restaurantId._id || cartObj.restaurantId.id || null;
       }
 
       return cartObj;
@@ -524,9 +536,15 @@ const resolvers = {
       if (!context.userId) throw new Error("Unauthorized");
 
       // Tính tổng tiền luôn phía server cho an toàn
+      // Ensure each item has restaurantId set (fallback to provided restaurantId)
+      items = (items || []).map(item => ({
+        ...item,
+        restaurantId: item.restaurantId || restaurantId || null,
+      }));
+
       let total = 0;
       items.forEach(item => {
-        total += item.price * item.quantity;
+        total += (item.price || 0) * (item.quantity || 0);
       });
 
       // Dùng findOneAndUpdate với option upsert: true
@@ -535,11 +553,11 @@ const resolvers = {
         { userId: context.userId },
         {
           userId: context.userId,
-          restaurantId,
+          // Do not persist a root-level restaurantId; keep restaurantId on each item
           items,
           totalAmount: total
         },
-        { new: true, upsert: true } // upsert: true là chìa khóa
+        { new: true, upsert: true }
       );
       return cart;
     },
@@ -547,6 +565,24 @@ const resolvers = {
       if (!context.userId) throw new Error('Unauthorized');
       const { restaurantId, items, totalAmount, paymentMethod, shippingAddress, shipperId } = input;
       if (!restaurantId) throw new Error('restaurantId required');
+      // Validate restaurantId is a valid Mongo ObjectId to avoid BSON cast errors
+      if (!mongoose.Types.ObjectId.isValid(String(restaurantId))) {
+        throw new Error('Invalid restaurantId');
+      }
+      // Ensure items exist and belong to the provided restaurantId
+      if (!Array.isArray(items) || items.length === 0) {
+        throw new Error('Order must contain at least one item');
+      }
+      // resolve food documents to verify restaurant ownership
+      const foodIds = items.map(i => i.foodId).filter(Boolean);
+      const foods = await Food.find({ _id: { $in: foodIds } });
+      if (foods.length !== foodIds.length) {
+        throw new Error('One or more items are invalid or do not exist');
+      }
+      const mismatched = foods.find(f => String(f.restaurantId) !== String(restaurantId));
+      if (mismatched) {
+        throw new Error('All items in an order must belong to the same restaurant');
+      }
       const orderData = {
         customerId: context.userId,
         restaurantId,
@@ -604,6 +640,83 @@ const resolvers = {
       }
 
       return saved;
+    },
+    createOrders: async (_, { inputs }, context) => {
+      if (!context.userId) throw new Error('Unauthorized');
+      if (!Array.isArray(inputs) || inputs.length === 0) {
+        throw new Error('inputs required');
+      }
+
+      const created = [];
+      // collect all foodIds to remove from cart later
+      const allPaidFoodIds = [];
+
+      for (const input of inputs) {
+        const { restaurantId, items, totalAmount, paymentMethod, shippingAddress, shipperId } = input;
+        if (!restaurantId) throw new Error('restaurantId required for each order');
+        if (!mongoose.Types.ObjectId.isValid(String(restaurantId))) {
+          throw new Error('Invalid restaurantId');
+        }
+
+        if (!Array.isArray(items) || items.length === 0) {
+          throw new Error('Each order must have at least one item');
+        }
+
+        const foodIds = items.map(i => i.foodId).filter(Boolean);
+        const foods = await Food.find({ _id: { $in: foodIds } });
+        if (foods.length !== foodIds.length) {
+          throw new Error('One or more items are invalid or do not exist');
+        }
+
+        const orderData = {
+          customerId: context.userId,
+          restaurantId,
+          shipperId: shipperId || null,
+          items: items || [],
+          totalAmount: totalAmount || 0,
+          paymentMethod: paymentMethod === 'ONLINE' ? 'ONLINE' : 'COD',
+          paymentStatus: paymentMethod === 'ONLINE' ? 'paid' : 'unpaid',
+          shippingAddress: shippingAddress || {},
+          status: 'pending',
+        };
+
+        const newOrder = new Order(orderData);
+        const saved = await newOrder.save();
+
+        // socket emit
+        try {
+          const io = context?.io;
+          if (io) io.to(`order_${restaurantId}`).emit('order_created', saved);
+        } catch (e) { console.error('Socket emit error', e); }
+
+        created.push(saved);
+        allPaidFoodIds.push(...foodIds.map(f => String(f)));
+      }
+
+      // Remove paid items from cart in one update
+      try {
+        const cart = await Cart.findOne({ userId: context.userId });
+        if (cart) {
+          const remainingItems = (cart.items || []).filter(ci => !allPaidFoodIds.includes((ci.foodId || ci.id || '').toString()));
+          if (remainingItems.length === 0) {
+            // leave cart empty or delete depending on business rule
+            cart.items = [];
+            cart.totalAmount = 0;
+            cart.restaurantId = null;
+            await cart.save();
+          } else {
+            let total = 0;
+            remainingItems.forEach(it => { total += (it.price || 0) * (it.quantity || 0); });
+            cart.items = remainingItems;
+            cart.totalAmount = total;
+            await cart.save();
+          }
+        }
+      } catch (e) {
+        console.error('Failed to remove paid items from cart after createOrders', e);
+      }
+
+      return created;
     },
     updateRestaurantStatus: async (_, { isOpen }, context) => {
       if (!context.userId) throw new Error("Unauthorized");
@@ -731,6 +844,8 @@ const resolvers = {
       } else {
         cart.items.push({
           foodId: foodId,
+          // store restaurantId on each item for clarity
+          restaurantId: restaurantId || null,
           name: foodInfo.name,
           price: foodInfo.price,
           quantity: quantity,

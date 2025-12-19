@@ -144,6 +144,7 @@ const typeDefs = `#graphql
     price: Float
     quantity: Int
     image: String
+    restaurantId: ID
   }
 
   type Cart {
@@ -161,7 +162,9 @@ const typeDefs = `#graphql
     price: Float
     quantity: Int!
     image: String
+    restaurantId: ID
   }
+
   
   input CreateOrderItemInput {
     foodId: ID
@@ -279,6 +282,7 @@ const typeDefs = `#graphql
       items: [CartItemInput]!
     ): Cart
     createOrder(input: CreateOrderInput!): Order
+    createOrders(inputs: [CreateOrderInput]!): [Order]
     updateRestaurantStatus(isOpen: Boolean!): Restaurant
     updateOrderStatus(orderId: ID!, status: String!): Order
     # Shipper nhận đơn

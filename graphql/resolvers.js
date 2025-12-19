@@ -193,8 +193,7 @@ const resolvers = {
       if (!context.userId) throw new Error("Unauthorized");
 
       const cart = await Cart.findOne({ userId: context.userId })
-        // items.restaurantId is where we store per-item restaurant reference
-        .populate('items.restaurantId')
+        .populate('restaurantId')
         .populate('items.foodId'); 
 
       if (!cart) return null;

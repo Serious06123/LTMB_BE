@@ -599,35 +599,6 @@ const resolvers = {
       // Save order
       const saved = await newOrder.save();
 
-      // Remove only the items that were paid from the user's cart.
-      // If the cart belongs to the same restaurant, remove the matching items;
-      // if the cart becomes empty afterward, delete the cart document.
-      try {
-        const cart = await Cart.findOne({ userId: context.userId });
-        if (cart) {
-          // If cart.restaurantId differs from order.restaurantId, we only
-          // remove items that match foodIds in the order and belonging to that restaurant.
-          const paidFoodIds = (items || []).map(i => i.foodId?.toString()).filter(Boolean);
-
-          // Filter out items from cart that are in paidFoodIds
-          const remainingItems = (cart.items || []).filter(ci => !paidFoodIds.includes((ci.foodId || ci.id || '').toString()));
-
-          if (remainingItems.length === 0) {
-            // await Cart.findOneAndDelete({ userId: context.userId });
-          } else {
-            // Recompute total
-            let total = 0;
-            remainingItems.forEach(it => { total += (it.price || 0) * (it.quantity || 0); });
-            cart.items = remainingItems;
-            cart.totalAmount = total;
-            cart.restaurantId = remainingItems.length > 0 ? cart.restaurantId : null;
-            await cart.save();
-          }
-        }
-      } catch (e) {
-        console.error('Failed to remove paid items from cart after order', e);
-      }
-
       // Emit socket event to restaurant room if io available
       try {
         const io = context?.io;
@@ -690,29 +661,6 @@ const resolvers = {
 
         created.push(saved);
         allPaidFoodIds.push(...foodIds.map(f => String(f)));
-      }
-
-      // Remove paid items from cart in one update
-      try {
-        const cart = await Cart.findOne({ userId: context.userId });
-        if (cart) {
-          const remainingItems = (cart.items || []).filter(ci => !allPaidFoodIds.includes((ci.foodId || ci.id || '').toString()));
-          if (remainingItems.length === 0) {
-            // leave cart empty or delete depending on business rule
-            cart.items = [];
-            cart.totalAmount = 0;
-            cart.restaurantId = null;
-            await cart.save();
-          } else {
-            let total = 0;
-            remainingItems.forEach(it => { total += (it.price || 0) * (it.quantity || 0); });
-            cart.items = remainingItems;
-            cart.totalAmount = total;
-            await cart.save();
-          }
-        }
-      } catch (e) {
-        console.error('Failed to remove paid items from cart after createOrders', e);
       }
 
       return created;
@@ -815,36 +763,49 @@ const resolvers = {
     addToCart: async (_, { foodId, quantity, restaurantId }, context) => {
       if (!context.userId) throw new Error("Unauthorized");
 
-      // 1. Tìm hoặc tạo giỏ hàng
+      // 1. Tìm giỏ hàng hiện tại của user
       let cart = await Cart.findOne({ userId: context.userId });
       
+      const foodInfo = await Food.findById(foodId);
+      if (!foodInfo) throw new Error("Món ăn không tồn tại");
+
+      // --- LOGIC MỚI: KIỂM TRA KHÁC NHÀ HÀNG ---
+      if (cart && cart.items.length > 0) {
+        // Lấy ID nhà hàng hiện tại trong giỏ (ưu tiên lấy từ root, nếu ko có thì lấy từ item đầu tiên)
+        const currentRestaurantId = cart.restaurantId 
+            ? cart.restaurantId.toString() 
+            : cart.items[0].restaurantId.toString();
+
+        // So sánh với nhà hàng của món mới định thêm
+        if (currentRestaurantId !== restaurantId) {
+            throw new Error("Giỏ hàng đang chứa món của nhà hàng khác. Vui lòng thanh toán hoặc xóa giỏ hàng cũ trước khi đặt quán mới!");
+        }
+      }
+      // -------------------------------------------
+
       if (!cart) {
         cart = new Cart({
           userId: context.userId,
-          restaurantId: restaurantId,
+          restaurantId: restaurantId, // Lưu ID quán ngay khi tạo giỏ
           items: [],
           totalAmount: 0
         });
       }
 
-      // --- LOGIC TRỘN GIỎ HÀNG ---
-      // Luôn cập nhật restaurantId thành quán mới nhất vừa thêm
-      // (Để Frontend hiển thị tên quán này ở đầu giỏ)
-      cart.restaurantId = restaurantId; 
+      // Cập nhật lại restaurantId cho chắc chắn (trường hợp giỏ rỗng nhưng vẫn còn doc)
+      if (cart.items.length === 0) {
+          cart.restaurantId = restaurantId;
+      }
 
       // 2. Xử lý thêm/cộng dồn món ăn
       const itemIndex = cart.items.findIndex(p => p.foodId.toString() === foodId);
       
-      const foodInfo = await Food.findById(foodId);
-      if (!foodInfo) throw new Error("Món ăn không tồn tại");
-
       if (itemIndex > -1) {
         cart.items[itemIndex].quantity += quantity;
       } else {
         cart.items.push({
           foodId: foodId,
-          // store restaurantId on each item for clarity
-          restaurantId: restaurantId || null,
+          restaurantId: restaurantId,
           name: foodInfo.name,
           price: foodInfo.price,
           quantity: quantity,
@@ -861,8 +822,6 @@ const resolvers = {
 
       await cart.save();
       
-      // --- QUAN TRỌNG: POPULATE CẢ RESTAURANT ---
-      // Phải populate restaurantId thì typeDefs mới trả về object Restaurant được
       return await cart.populate([
           { path: 'items.foodId' },
           { path: 'restaurantId' }

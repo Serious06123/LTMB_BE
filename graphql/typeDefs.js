@@ -145,12 +145,14 @@ const typeDefs = `#graphql
     quantity: Int
     image: String
     restaurantId: ID
+    restaurantName: String
   }
 
   type Cart {
     _id: ID!
     userId: ID
     restaurantId: ID
+    restaurantName: String
     items: [CartItem]
     totalAmount: Float
     updatedAt: String

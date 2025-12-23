@@ -201,6 +201,8 @@ const typeDefs = `#graphql
     getFood(id: ID!): Food
     getFoodsByRestaurant(restaurantId: ID!, category: String): [Food]
     getOrder(id: ID!): Order
+    # Lấy thông tin quán theo id
+    restaurant(id: ID!): Restaurant
     # Lấy thông tin quán của user đang đăng nhập
     myRestaurantProfile: Restaurant
     # Lấy đơn hàng của quán (có thể lọc theo trạng thái)

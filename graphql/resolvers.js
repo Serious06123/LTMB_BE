@@ -184,6 +184,15 @@ const resolvers = {
 
       return order;
     },
+    // Lấy thông tin Restaurant theo id
+    restaurant: async (_, { id }) => {
+      try {
+        return await Restaurant.findById(id);
+      } catch (err) {
+        console.error('Error fetching restaurant by id', err);
+        return null;
+      }
+    },
     // Query Shipper mới thêm
     getShipperProfile: async (_, __, context) => {
       if (!context.userId) throw new Error("Unauthorized");
